@@ -5,6 +5,13 @@
 !pyproject.toml
 !.env.example
 !Dockerfile
+!docker-compose.production.yml
+!docs/
+docs/**
+!docs/CPANEL-PRODUCTION-DEPLOYMENT.md
+!deploy/
+deploy/**
+!deploy/apache-rmr-ssl-include.conf.example
 !rmr_platform/
 !rmr_platform/**
 !public/

@@ -91,9 +91,12 @@ Chromium and test-only dependencies. The final runtime contains application
 source/assets, not QA/tests/reports/local data, and runs as UID/GID 10001.
 It listens on container port 8000 and stores application files under /data.
 
-Existing Compose files are **local/pilot, certification, Product Owner or manual
-acceptance definitions**, not production deployment approval. A production
-Compose file is intentionally not created in this repository-preparation task.
+Use [docker-compose.production.yml](docker-compose.production.yml) for the current
+cPanel/Apache VPS architecture: loopback port 18100, RMR port 8000 and private
+PostgreSQL 16. Follow [the exact deployment runbook](docs/CPANEL-PRODUCTION-DEPLOYMENT.md)
+and [production environment reference](deploy/production.env.example). Deployment
+still requires separate approval. Other Compose files remain local/pilot,
+certification, Product Owner or manual-acceptance definitions only.
 
 ## Repository hygiene
 

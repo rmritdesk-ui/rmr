@@ -1,0 +1,20 @@
+# Example contents for ONLY the RMR HTTPS vhost's cPanel userdata SSL include.
+# Do not paste into the global server config or directly edit managed httpd.conf.
+# A cPanel administrator must substitute the account/domain and review AutoSSL.
+# Requires mod_proxy, mod_proxy_http and mod_headers. Existing HTTPS vhost supplies TLS.
+ProxyRequests Off
+ProxyPreserveHost On
+ProxyAddHeaders On
+
+# For direct Internet -> Apache. If a trusted CDN exists, configure mod_remoteip
+# correctly first; never accept an arbitrary client-supplied forwarded chain.
+RequestHeader unset X-Forwarded-For
+RequestHeader set X-Forwarded-Proto "https"
+# mod_proxy adds the actual client address to X-Forwarded-For.
+
+# Preserve cPanel/AutoSSL challenge handling in the existing document root.
+ProxyPass "/.well-known/" "!"
+ProxyPass "/" "http://127.0.0.1:18100/" connectiontimeout=5 timeout=150
+ProxyPassReverse "/" "http://127.0.0.1:18100/"
+# Match the existing RMR upload limit (250 MiB).
+LimitRequestBody 262144000

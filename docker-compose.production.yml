@@ -1,0 +1,129 @@
+# Explicitly select this file; never merge it with the pilot/manual definitions.
+name: rmr-production
+
+x-bounded-logs: &bounded-logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${RMR_POSTGRES_DB:?Set the dedicated RMR database name}
+      POSTGRES_USER: ${RMR_POSTGRES_USER:?Set the dedicated RMR database user}
+      POSTGRES_PASSWORD: ${RMR_POSTGRES_PASSWORD:?Set a unique URL-safe production password}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=40", "-c", "work_mem=4MB"]
+    # No ports: PostgreSQL is reachable only on this project's Docker network.
+    networks: [rmr]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 512m
+    cpus: "0.50"
+    shm_size: 128m
+    stop_grace_period: 60s
+    logging: *bounded-logs
+
+  app:
+    image: rmr-global:${RMR_RELEASE_TAG:?Set the versioned image release tag}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        RMR_VERSION: ${RMR_RELEASE_TAG:?Set the versioned image release tag}
+        RMR_REVISION: ${RMR_RELEASE_REVISION:?Set the source commit SHA}
+    restart: unless-stopped
+    init: true
+    user: "10001:10001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18100:8000"
+    networks: [rmr]
+    volumes:
+      - app-data:/data
+    environment:
+      RMR_ENVIRONMENT: production
+      RMR_HOST: "0.0.0.0"
+      RMR_PORT: "8000"
+      RMR_DATA_DIR: /data
+      # Password must be URL-safe (generate 32 random bytes as 64 hex characters).
+      RMR_DATABASE_URL: postgresql+psycopg://${RMR_POSTGRES_USER:?Required}:${RMR_POSTGRES_PASSWORD:?Required}@postgres:5432/${RMR_POSTGRES_DB:?Required}
+      RMR_BASE_URL: ${RMR_BASE_URL:?Set the actual HTTPS RMR domain}
+      RMR_SECRET_KEY: ${RMR_SECRET_KEY:?Set a stable production signing secret}
+      RMR_SETUP_TOKEN: ${RMR_SETUP_TOKEN:-}
+      RMR_CREDENTIAL_ENCRYPTION_KEY: ${RMR_CREDENTIAL_ENCRYPTION_KEY:?Set a stable encryption secret}
+      RMR_INTEGRATION_ENCRYPTION_KEY: ${RMR_INTEGRATION_ENCRYPTION_KEY:?Set a valid stable Fernet key}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:?Set trusted Apache proxy source addresses}
+      RMR_COOKIE_SECURE: "true"
+      RMR_INSTALL_PROFILE: empty
+      RMR_AUTO_MIGRATE: "false"
+      RMR_AUTO_SEED: "false"
+      RMR_ALLOW_DEMO_CREDENTIALS: "false"
+      RMR_LOCAL_RECOVERY_MODE: "false"
+      RMR_SESSION_HOURS: "12"
+      RMR_MAX_UPLOAD_MB: "250"
+      RMR_PIQ_WORKER_ENABLED: ${RMR_PIQ_WORKER_ENABLED:-false}
+      RMR_PIQ_LIVE_DISCOVERY_ENABLED: ${RMR_PIQ_LIVE_DISCOVERY_ENABLED:-false}
+      RMR_PIQ_DISCOVERY_PROVIDER: google_places
+      RMR_GOOGLE_PLACES_API_KEY: ${RMR_GOOGLE_PLACES_API_KEY:-}
+      RMR_PIQ_MAX_QUERIES_PER_RUN: ${RMR_PIQ_MAX_QUERIES_PER_RUN:-1}
+      RMR_PIQ_MAX_RESULTS_PER_RUN: ${RMR_PIQ_MAX_RESULTS_PER_RUN:-50}
+      RMR_PIQ_MAX_CANDIDATES_PER_RUN: ${RMR_PIQ_MAX_CANDIDATES_PER_RUN:-100}
+      RMR_PIQ_DISCOVERY_TIMEOUT_SECONDS: "30"
+      RMR_PIQ_JOB_MAX_ATTEMPTS: "1"
+      RMR_PIQ_WORKER_POLL_SECONDS: "5"
+      RMR_PIQ_LIVE_RESEARCH_ENABLED: ${RMR_PIQ_LIVE_RESEARCH_ENABLED:-false}
+      RMR_PIQ_RESEARCH_PROVIDER: openai
+      RMR_PIQ_RESEARCH_WEB_SEARCH_ENABLED: ${RMR_PIQ_RESEARCH_WEB_SEARCH_ENABLED:-false}
+      RMR_PIQ_RESEARCH_MODEL: gpt-4.1-mini-2025-04-14
+      RMR_PIQ_RESEARCH_MAX_COST_USD: ${RMR_PIQ_RESEARCH_MAX_COST_USD:-0.05}
+      RMR_PIQ_RESEARCH_TIMEOUT_SECONDS: "120"
+      RMR_AI_API_KEY: ${RMR_AI_API_KEY:-}
+      RMR_AI_BASE_URL: https://api.openai.com/v1
+      RMR_SYSTEM_EMAIL_PROVIDER: smtp
+      RMR_SYSTEM_EMAIL_FROM: ${RMR_SYSTEM_EMAIL_FROM:-}
+      RMR_SYSTEM_SMTP_HOST: ${RMR_SYSTEM_SMTP_HOST:-}
+      RMR_SYSTEM_SMTP_PORT: ${RMR_SYSTEM_SMTP_PORT:-587}
+      RMR_SYSTEM_SMTP_STARTTLS: "true"
+      RMR_SYSTEM_SMTP_USERNAME: ${RMR_SYSTEM_SMTP_USERNAME:-}
+      RMR_SYSTEM_SMTP_PASSWORD: ${RMR_SYSTEM_SMTP_PASSWORD:-}
+      # Optional campaign/billing features are not enabled by PIQ deployment.
+      RMR_CB1_WORKER_ENABLED: "false"
+      RMR_PROVIDER_MODE: mock
+      RMR_PAYMENT_PROVIDER: mock
+      RMR_AI_MODE: safe-template
+      RMR_EXTERNAL_SITE_LIVE_TEST: "false"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; h=json.load(urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=5)); raise SystemExit(0 if h.get('status')=='healthy' else 1)"]
+      interval: 15s
+      timeout: 8s
+      retries: 8
+      start_period: 30s
+    mem_limit: 640m
+    cpus: "1.00"
+    pids_limit: 128
+    stop_grace_period: 150s
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *bounded-logs
+
+networks:
+  rmr:
+    driver: bridge
+    # Dedicated, not external/shared. App needs outbound provider HTTPS in production.
+
+volumes:
+  postgres-data:
+  app-data:

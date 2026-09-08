@@ -1,5 +1,11 @@
 # Production preparation (not deployment approval)
 
+**Current VPS update:** use [CPANEL-PRODUCTION-DEPLOYMENT.md](CPANEL-PRODUCTION-DEPLOYMENT.md)
+and docker-compose.production.yml. The inspected VPS uses cPanel/Apache on 80/443
+and RMR loopback port 18100. The earlier generic Nginx/port-selection guidance
+below is historical, not applicable to this VPS. A production Compose definition
+now exists; no standalone Nginx service should be installed.
+
 GitHub → separate VPS checkout → dedicated PostgreSQL 16 → RMR Docker → existing
 Nginx/reverse proxy → HTTPS. Standalone ProspectIQ is never part of this chain.
 

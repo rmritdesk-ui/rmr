@@ -45,6 +45,10 @@ RUN python -m pip install --no-cache-dir -r requirements-dev.txt \
  && python -m playwright install --with-deps chromium
 COPY tests ./tests
 COPY scripts/test_*_postgres.py ./scripts/
+COPY scripts/container-entrypoint.sh ./scripts/
+COPY docker-compose.production.yml ./
+COPY docs/CPANEL-PRODUCTION-DEPLOYMENT.md ./docs/
+COPY deploy/apache-rmr-ssl-include.conf.example ./deploy/
 COPY .env.example ./
 ENV RMR_DATA_DIR=/tmp/rmr-release-tests \
     RMR_AUTO_MIGRATE=false \

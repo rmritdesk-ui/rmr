@@ -1,0 +1,18 @@
+# Validation-only overlay: no provider credentials, workers or external routing.
+# Always use a unique -p name, never rmr-production or an existing project.
+services:
+  app:
+    environment:
+      RMR_PIQ_WORKER_ENABLED: "false"
+      RMR_PIQ_LIVE_DISCOVERY_ENABLED: "false"
+      RMR_PIQ_LIVE_RESEARCH_ENABLED: "false"
+      RMR_PIQ_RESEARCH_WEB_SEARCH_ENABLED: "false"
+      RMR_GOOGLE_PLACES_API_KEY: ""
+      RMR_AI_API_KEY: ""
+      RMR_CB1_WORKER_ENABLED: "false"
+      RMR_SYSTEM_SMTP_HOST: ""
+      RMR_SYSTEM_SMTP_USERNAME: ""
+      RMR_SYSTEM_SMTP_PASSWORD: ""
+networks:
+  rmr:
+    internal: true
