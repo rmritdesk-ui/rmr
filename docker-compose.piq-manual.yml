@@ -1,0 +1,32 @@
+# Isolated WIP manual acceptance runtime. Never mount Product Owner data.
+# Apply approved migrations separately before starting this service.
+services:
+  app:
+    image: rmr-piq-phase0-test:latest
+    pull_policy: never
+    container_name: rmr-wip-manual-piq
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+      PYTHONDONTWRITEBYTECODE: "1"
+      RMR_HOST: 0.0.0.0
+      RMR_PORT: "8000"
+      RMR_DATA_DIR: /data
+      RMR_DATABASE_URL: sqlite:////data/manual-demo.db
+      RMR_ALLOW_DEMO_CREDENTIALS: "true"
+      RMR_INSTALL_PROFILE: demo
+      RMR_AUTO_MIGRATE: "false"
+      RMR_AUTO_SEED: "false"
+      RMR_PIQ_MAX_RESULTS_PER_RUN: "50"
+      RMR_PIQ_MAX_CANDIDATES_PER_RUN: "100"
+    entrypoint: ["python", "-B", "-m", "rmr_platform.server"]
+    ports:
+      - "127.0.0.1:8091:8000"
+    volumes:
+      - ./rmr_platform:/app/rmr_platform:ro
+      - ./public:/app/public:ro
+      - ./templates:/app/templates:ro
+      - ./static:/app/static:ro
+      - ./data/piq-manual-demo:/data

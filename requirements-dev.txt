@@ -1,0 +1,5 @@
+# CI/development only; never installed in the runtime image.
+pytest==8.4.2
+playwright==1.55.0
+Pillow==11.3.0
+pathspec==0.12.1

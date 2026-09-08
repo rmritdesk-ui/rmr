@@ -1,0 +1,17 @@
+RMR GLOBAL v5.4.1.2C PRODUCT OWNER PACKAGING/STARTUP CORRECTION
+
+Application release identity remains: 5.4.1.2-interaction-regression-correction-po1
+Immediate exact source artifact: RMR-Global-v5.4.1.2B-PO-Packaging-Correction.zip
+Immediate exact source SHA-256: 1b4ced87fc65ca68d1157fa5cab44eab2d5384387d89fde55bfd7edc0acfdebc
+
+AUTHORIZED PACKAGING/STARTUP CORRECTION ONLY
+- Audit the complete START-PRODUCT-OWNER-TEST execution chain.
+- Package all direct QA Python/JSON dependencies rather than whitelisting one gate at a time.
+- Copy the packaged QA set to /app/qa and fail the Docker build if either launcher gate is missing or cannot execute.
+- Use a unique no-cache Docker image/project/data directory/port to prevent stale-image reuse.
+- Audit all launcher-required application, QA, public and entrypoint files inside the running container before functional QC.
+- No application, route, interaction, Forecasting, data, database, permission, tenant-isolation or theme implementation changes.
+- No new migration.
+
+Windows Product Owner environment: port 8089, project rmr-global-v5412c-product-owner, product-owner-data-v5412c.
+This package is not production approved.

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page.seo_title or site.company_name }}</title>
+  <meta name="description" content="{{ page.seo_description }}">
+  <style>
+    :root{--primary:{{ site.primary_color }};--secondary:{{ site.secondary_color }};--accent:{{ site.accent_color }};--heading:{{ site.heading_font }};--body:{{ site.body_font }}}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:var(--body),Arial,sans-serif;color:#172033;background:#fff;line-height:1.55}a{color:inherit;text-decoration:none}
+    .site-nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:18px clamp(20px,5vw,72px);background:rgba(255,255,255,.96);border-bottom:1px solid #e7ebf2;backdrop-filter:blur(16px)}
+    .wordmark{font-family:var(--heading),Georgia,serif;font-weight:800;letter-spacing:.05em;font-size:1.25rem}.nav-links{display:flex;gap:22px;align-items:center;font-size:.92rem}.nav-cta{padding:10px 16px;background:var(--primary);color:#fff;border-radius:999px}
+    .preview-flag{position:fixed;z-index:50;bottom:16px;right:16px;background:#111827;color:#fff;padding:8px 12px;border-radius:999px;font-size:.78rem;box-shadow:0 12px 32px rgba(0,0,0,.25)}
+    section{padding:clamp(56px,8vw,110px) clamp(22px,7vw,110px)}.container{max-width:1180px;margin:0 auto}.eyebrow{letter-spacing:.18em;text-transform:uppercase;font-size:.72rem;font-weight:800;color:var(--accent)}
+    h1,h2,h3{font-family:var(--heading),Georgia,serif;line-height:1.02;margin:0 0 20px}h1{font-size:clamp(2.8rem,7vw,6.5rem);max-width:900px}h2{font-size:clamp(2rem,4vw,4rem)}p{max-width:760px}.hero{background:linear-gradient(135deg,var(--primary),#081827);color:#fff;min-height:620px;display:flex;align-items:center}.hero.centered{text-align:center}.hero.centered .container,.hero.centered p{margin-left:auto;margin-right:auto}.hero.editorial{background:var(--secondary);color:#172033}.hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:30px}.button{display:inline-flex;align-items:center;justify-content:center;padding:14px 22px;border-radius:999px;background:var(--accent);color:#fff;font-weight:800}.button.secondary{background:transparent;border:1px solid currentColor}
+    .services,.resources{background:var(--secondary)}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.card{background:#fff;padding:28px;border:1px solid #e3e8ef;border-radius:18px;box-shadow:0 12px 36px rgba(16,24,40,.06)}.card p{color:#576579}.metric{font-size:2.2rem;font-weight:850;color:var(--primary)}.team-card{display:flex;gap:18px;align-items:flex-start}.team-photo{width:72px;height:72px;border-radius:50%;object-fit:cover;background:#e8edf5;flex:0 0 auto}.team-initials{width:72px;height:72px;border-radius:50%;display:grid;place-items:center;background:var(--primary);color:#fff;font:800 1.25rem var(--heading);flex:0 0 auto}.post-meta{font-size:.76rem;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:800}.resource-link{display:inline-flex;margin-top:10px;font-weight:800;color:var(--primary)}
+    .contact{background:#f7f9fc}.contact-layout{display:grid;grid-template-columns:1fr 1fr;gap:48px}.forms{display:grid;gap:22px}.lead-form{display:grid;gap:12px}.lead-form input,.lead-form textarea{width:100%;border:1px solid #d7deea;border-radius:12px;padding:13px 14px;font:inherit}.lead-form textarea{min-height:110px}.lead-form button{border:0;cursor:pointer}.form-status{min-height:24px;font-weight:700}.appointment-card{padding:22px;border:1px solid #dfe6ef;border-radius:18px;background:#fff}.appointment-card h3{margin-bottom:8px}
+    footer{padding:34px clamp(22px,7vw,110px);background:#081827;color:#dbe5f5}.footer-inner{max-width:1180px;margin:0 auto;display:flex;justify-content:space-between;gap:20px}
+    @media(max-width:800px){.nav-links{display:none}.grid,.contact-layout{grid-template-columns:1fr}.hero{min-height:520px}.site-nav{padding:14px 20px}}
+  </style>
+</head>
+<body data-site-slug="{{ site.slug }}">
+  {% if preview %}<div class="preview-flag">Website preview</div>{% endif %}
+  <nav class="site-nav">
+    <a class="wordmark" href="/sites/{{ site.slug }}{% if preview %}?preview=1{% endif %}">{{ site.wordmark or site.company_name }}</a>
+    <div class="nav-links">
+      {% for nav_page in pages %}
+        {% if nav_page.show_in_nav %}<a href="/sites/{{ site.slug }}?page={{ nav_page.slug }}{% if preview %}&preview=1{% endif %}">{{ nav_page.title }}</a>{% endif %}
+      {% endfor %}
+      <a class="nav-cta" href="#contact">Talk with us</a>
+    </div>
+  </nav>
+
+  {% for section in sections %}
+    {% set s = section.settings_json %}
+    {% if section.section_type == 'hero' %}
+      <section class="hero {{ s.get('layout','split') }}"><div class="container"><div class="eyebrow">{{ s.get('eyebrow','WELCOME') }}</div><h1>{{ s.get('headline',site.company_name) }}</h1><p>{{ s.get('supporting_text','') }}</p><div class="hero-actions">{% if s.get('primary_button') %}<a class="button" href="#contact">{{ s.get('primary_button') }}</a>{% endif %}{% if s.get('secondary_button') %}<a class="button secondary" href="#services">{{ s.get('secondary_button') }}</a>{% endif %}</div></div></section>
+    {% elif section.section_type == 'services' %}
+      <section class="services" id="services"><div class="container"><div class="eyebrow">Services</div><h2>{{ s.get('headline','How we help') }}</h2><div class="grid">{% for item in s.get('items',[]) %}<div class="card"><h3>{{ item }}</h3><p>Clear guidance, accountable follow-through, and service designed around your goals.</p></div>{% endfor %}</div></div></section>
+    {% elif section.section_type == 'metrics' %}
+      <section><div class="container"><div class="eyebrow">Evidence</div><h2>{{ s.get('headline','Progress you can see') }}</h2><div class="grid">{% for item in s.get('items',[]) %}<div class="card"><div class="metric">{{ item.get('value') }}</div><div>{{ item.get('label') }}</div></div>{% endfor %}</div></div></section>
+    {% elif section.section_type == 'text' %}
+      <section><div class="container"><div class="eyebrow">{{ s.get('eyebrow','') }}</div><h2>{{ s.get('headline','') }}</h2><p>{{ s.get('body','') }}</p></div></section>
+    {% elif section.section_type == 'contact' %}
+      <section class="contact" id="contact"><div class="container contact-layout"><div><div class="eyebrow">Contact</div><h2>{{ s.get('headline','Ready to talk?') }}</h2><p>{{ s.get('body','Tell us what you are working toward.') }}</p></div><div class="forms"><form class="lead-form appointment-card" id="lead-form"><h3>Send a message</h3><input name="name" placeholder="Your name" required><input name="email" type="email" placeholder="Email" required><input name="phone" placeholder="Phone"><input name="company" placeholder="Company"><textarea name="message" placeholder="How can we help?"></textarea><button class="button" type="submit">Send request</button><div class="form-status" id="form-status"></div></form><form class="lead-form appointment-card" id="appointment-form"><h3>Request an appointment</h3><input name="name" placeholder="Your name" required><input name="email" type="email" placeholder="Email"><input name="phone" placeholder="Phone"><input name="preferred_time" placeholder="Preferred day or time"><textarea name="message" placeholder="What would you like to discuss?"></textarea><button class="button" type="submit">Request appointment</button><div class="form-status" id="appointment-status"></div></form></div></div></section>
+    {% endif %}
+  {% endfor %}
+
+  {% if page.slug in ['about','team'] and team_profiles %}<section><div class="container"><div class="eyebrow">Your team</div><h2>People ready to help</h2><div class="grid">{% for member in team_profiles %}<article class="card team-card">{% if member.photo_url %}<img class="team-photo" src="{{ member.photo_url }}" alt="{{ member.full_name }}">{% else %}<div class="team-initials">{{ member.full_name[:1] }}</div>{% endif %}<div><h3>{{ member.full_name }}</h3><strong>{{ member.title }}</strong><p>{{ member.bio }}</p>{% if member.email %}<a href="mailto:{{ member.email }}">{{ member.email }}</a>{% endif %}</div></article>{% endfor %}</div></div></section>{% endif %}
+
+  {% if page.slug in ['resources','blog','insights'] and resources %}<section class="resources"><div class="container"><div class="eyebrow">Resources</div><h2>Practical guidance</h2><div class="grid">{% for resource in resources %}<article class="card"><div class="post-meta">{{ resource.resource_type }}</div><h3>{{ resource.title }}</h3><p>{{ resource.description }}</p><a class="resource-link" href="{{ resource.url }}">Open resource →</a></article>{% endfor %}</div></div></section>{% endif %}
+
+  {% if page.slug in ['resources','blog','insights','home'] and posts %}<section><div class="container"><div class="eyebrow">Latest insights</div><h2>Helpful ideas for your next step</h2><div class="grid">{% for post in posts[:6] %}<article class="card">{% if post.featured_image_url %}<img src="{{ post.featured_image_url }}" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:12px;margin-bottom:18px">{% endif %}<div class="post-meta">Article</div><h3>{{ post.title }}</h3><p>{{ post.summary }}</p></article>{% endfor %}</div></div></section>{% endif %}
+
+  <footer><div class="footer-inner"><strong>{{ site.company_name }}</strong><span>Website managed through RMR Global</span></div></footer>
+  <script src="/static/public-site.js?v=5.4.0-tenant-themes-po1"></script>
+</body>
+</html>

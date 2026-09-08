@@ -1,0 +1,10 @@
+# Docker's own logging driver/rotation should normally be configured globally.
+# This example is only for additional host-side RMR logs if later introduced.
+/var/log/rmr-platform/*.log {
+    daily
+    rotate 14
+    compress
+    missingok
+    notifempty
+    copytruncate
+}

@@ -1,0 +1,575 @@
+{
+  "dashboard": {
+    "aliases": [
+      "Customer Workspace",
+      "Dashboard",
+      "Home"
+    ],
+    "candidates": [
+      {
+        "route": "/activate/",
+        "score": 0,
+        "source": "public/app.js",
+        "label": "Home"
+      },
+      {
+        "route": "/reset-password/",
+        "score": 0,
+        "source": "public/app.js",
+        "label": "Home"
+      },
+      {
+        "route": "/sites/{site_slug}",
+        "score": -2,
+        "source": "rmr_platform/routes/website.py",
+        "label": "Home"
+      },
+      {
+        "route": "/tenants/{tenant_id}/success",
+        "score": -2,
+        "source": "rmr_platform/routes/portfolio.py",
+        "label": "Home"
+      },
+      {
+        "route": "/api/auth/me",
+        "score": -5,
+        "source": "public/app.js",
+        "label": "Home"
+      },
+      {
+        "route": "/api/tenants",
+        "score": -5,
+        "source": "public/app.js",
+        "label": "Home"
+      },
+      {
+        "route": "/api/auth/logout",
+        "score": -5,
+        "source": "public/app.js",
+        "label": "Home"
+      },
+      {
+        "route": "/api/setup/status",
+        "score": -5,
+        "source": "public/app.js",
+        "label": "Home"
+      }
+    ],
+    "preferred": "/activate/"
+  },
+  "website": {
+    "aliases": [
+      "Website Studio",
+      "Website"
+    ],
+    "candidates": [
+      {
+        "route": "/api/website/sections/",
+        "score": 5,
+        "source": "rmr_platform/routes/website.py",
+        "label": "Website"
+      },
+      {
+        "route": "/api/website/pages/{page_id}",
+        "score": 3,
+        "source": "rmr_platform/routes/website.py",
+        "label": "Website"
+      },
+      {
+        "route": "/api/tenants/{tenant_id}/website",
+        "score": 3,
+        "source": "rmr_platform/routes/website.py",
+        "label": "Website"
+      },
+      {
+        "route": "/api/website/sections/{section_id}",
+        "score": 3,
+        "source": "rmr_platform/routes/website.py",
+        "label": "Website"
+      },
+      {
+        "route": "/api/tenants/{tenant_id}/website/pages",
+        "score": 3,
+        "source": "rmr_platform/routes/website.py",
+        "label": "Website"
+      },
+      {
+        "route": "/api/tenants/{tenant_id}/website/sections",
+        "score": 3,
+        "source": "rmr_platform/routes/website.py",
+        "label": "Website"
+      },
+      {
+        "route": "/api",
+        "score": 0,
+        "source": "rmr_platform/routes/portfolio.py",
+        "label": "Website"
+      },
+      {
+        "route": "/static",
+        "score": 0,
+        "source": "rmr_platform/main.py",
+        "label": "Website"
+      }
+    ],
+    "preferred": "/api/website/sections/"
+  },
+  "crm": {
+    "aliases": [
+      "CRM Workspace",
+      "CRM"
+    ],
+    "candidates": [
+      {
+        "route": "/tenants/{tenant_id}/crm/summary",
+        "score": 8,
+        "source": "rmr_platform/routes/crm.py",
+        "label": "CRM"
+      },
+      {
+        "route": "/piq/{opportunity_id}/move-to-crm",
+        "score": 8,
+        "source": "rmr_platform/routes/piq.py",
+        "label": "CRM"
+      },
+      {
+        "route": "/api/crm",
+        "score": 5,
+        "source": "rmr_platform/commercial/middleware.py",
+        "label": "CRM"
+      },
+      {
+        "route": "/api",
+        "score": 0,
+        "source": "rmr_platform/routes/crm.py",
+        "label": "CRM"
+      },
+      {
+        "route": "/static",
+        "score": 0,
+        "source": "rmr_platform/main.py",
+        "label": "CRM"
+      },
+      {
+        "route": "/events",
+        "score": 0,
+        "source": "rmr_platform/commercial/router.py",
+        "label": "CRM"
+      },
+      {
+        "route": "/messages",
+        "score": 0,
+        "source": "templates/cb1_commercial.html",
+        "label": "CRM"
+      },
+      {
+        "route": "/commercial",
+        "score": 0,
+        "source": "public/cb1_enhancements.js",
+        "label": "CRM Workspace"
+      }
+    ],
+    "preferred": "/tenants/{tenant_id}/crm/summary"
+  },
+  "piq": {
+    "aliases": [
+      "ProspectIQ",
+      "PIQ"
+    ],
+    "candidates": [
+      {
+        "route": "/tenants/{tenant_id}/piq",
+        "score": 8,
+        "source": "rmr_platform/routes/piq.py",
+        "label": "PIQ"
+      },
+      {
+        "route": "/piq/{opportunity_id}/enhance",
+        "score": 8,
+        "source": "rmr_platform/routes/piq.py",
+        "label": "PIQ"
+      },
+      {
+        "route": "/piq/{opportunity_id}/move-to-crm",
+        "score": 8,
+        "source": "rmr_platform/routes/piq.py",
+        "label": "PIQ"
+      },
+      {
+        "route": "/api",
+        "score": 0,
+        "source": "rmr_platform/routes/piq.py",
+        "label": "ProspectIQ"
+      },
+      {
+        "route": "/static",
+        "score": 0,
+        "source": "rmr_platform/main.py",
+        "label": "PIQ"
+      },
+      {
+        "route": "/events",
+        "score": 0,
+        "source": "rmr_platform/commercial/router.py",
+        "label": "PIQ"
+      },
+      {
+        "route": "/messages",
+        "score": 0,
+        "source": "templates/cb1_commercial.html",
+        "label": "PIQ"
+      },
+      {
+        "route": "/messages/generate",
+        "score": 0,
+        "source": "templates/cb1_commercial.html",
+        "label": "PIQ"
+      }
+    ],
+    "preferred": "/tenants/{tenant_id}/piq"
+  },
+  "campaigns": {
+    "aliases": [
+      "Campaigns & Content",
+      "Campaigns",
+      "Content"
+    ],
+    "candidates": [
+      {
+        "route": "/campaigns",
+        "score": 10,
+        "source": "rmr_platform/commercial/router.py",
+        "label": "Campaigns"
+      },
+      {
+        "route": "/campaigns/{campaign_id}",
+        "score": 8,
+        "source": "rmr_platform/routes/campaigns.py",
+        "label": "Campaigns"
+      },
+      {
+        "route": "/campaigns/{cid}/generate",
+        "score": 8,
+        "source": "rmr_platform/commercial/router.py",
+        "label": "Campaigns"
+      },
+      {
+        "route": "/tenants/{tenant_id}/campaigns",
+        "score": 8,
+        "source": "rmr_platform/routes/campaigns.py",
+        "label": "Campaigns"
+      },
+      {
+        "route": "/api/cb1/tenants/{tenant_id}/campaigns",
+        "score": 3,
+        "source": "rmr_platform/cb1_router.py",
+        "label": "Campaigns"
+      },
+      {
+        "route": "/api/cb1/campaigns/{campaign_id}/{action}",
+        "score": 3,
+        "source": "rmr_platform/cb1_router.py",
+        "label": "Campaigns"
+      },
+      {
+        "route": "/social-content",
+        "score": 2,
+        "source": "templates/cb1_commercial.html",
+        "label": "Content"
+      },
+      {
+        "route": "/me",
+        "score": 0,
+        "source": "templates/cb1_commercial.html",
+        "label": "Content"
+      }
+    ],
+    "preferred": "/campaigns"
+  },
+  "email": {
+    "aliases": [
+      "Email & Activities",
+      "Activities",
+      "Connected Email"
+    ],
+    "candidates": [
+      {
+        "route": "/tenant",
+        "score": 0,
+        "source": "rmr_platform/routes/crm.py",
+        "label": "Activities"
+      },
+      {
+        "route": "/tenants/{tenant_id}/activities",
+        "score": 0,
+        "source": "rmr_platform/routes/crm.py",
+        "label": "Activities"
+      },
+      {
+        "route": "/accounts/{account_id}/360",
+        "score": -2,
+        "source": "rmr_platform/routes/crm.py",
+        "label": "Activities"
+      },
+      {
+        "route": "/tenants/{tenant_id}/contacts",
+        "score": -2,
+        "source": "rmr_platform/routes/crm.py",
+        "label": "Activities"
+      },
+      {
+        "route": "/api/cb1",
+        "score": -5,
+        "source": "templates/cb1_commercial.html",
+        "label": "Connected Email"
+      }
+    ],
+    "preferred": "/tenant"
+  },
+  "reporting": {
+    "aliases": [
+      "Management Intelligence",
+      "Reporting",
+      "Reports",
+      "Forecasting"
+    ],
+    "candidates": [
+      {
+        "route": "/tenants/{tenant_id}/reports/ttm",
+        "score": 0,
+        "source": "rmr_platform/routes/forecast.py",
+        "label": "Reports"
+      },
+      {
+        "route": "/tenants/{tenant_id}/success",
+        "score": -2,
+        "source": "rmr_platform/routes/portfolio.py",
+        "label": "Forecasting"
+      },
+      {
+        "route": "/api/setup/status",
+        "score": -5,
+        "source": "public/app.js",
+        "label": "Reports"
+      }
+    ],
+    "preferred": "/tenants/{tenant_id}/reports/ttm"
+  },
+  "training": {
+    "aliases": [
+      "Training Library",
+      "Training"
+    ],
+    "candidates": [
+      {
+        "route": "/training",
+        "score": 10,
+        "source": "rmr_platform/routes/training.py",
+        "label": "Training"
+      },
+      {
+        "route": "/training/{resource_id}/progress",
+        "score": 8,
+        "source": "rmr_platform/routes/training.py",
+        "label": "Training"
+      },
+      {
+        "route": "/api/training",
+        "score": 5,
+        "source": "public/pages/client.js",
+        "label": "Training Library"
+      },
+      {
+        "route": "/api/training/files/{filename}",
+        "score": 3,
+        "source": "rmr_platform/main.py",
+        "label": "Training"
+      },
+      {
+        "route": "/api",
+        "score": 0,
+        "source": "rmr_platform/routes/training.py",
+        "label": "Training"
+      },
+      {
+        "route": "/static",
+        "score": 0,
+        "source": "rmr_platform/main.py",
+        "label": "Training"
+      },
+      {
+        "route": "/{path:path}",
+        "score": -2,
+        "source": "rmr_platform/main.py",
+        "label": "Training"
+      },
+      {
+        "route": "/tenants/{tenant_id}/success",
+        "score": -2,
+        "source": "rmr_platform/routes/portfolio.py",
+        "label": "Training"
+      }
+    ],
+    "preferred": "/training"
+  },
+  "team": {
+    "aliases": [
+      "Sales Organization",
+      "Team",
+      "Settings"
+    ],
+    "candidates": [
+      {
+        "route": "/api",
+        "score": 0,
+        "source": "rmr_platform/routes/training.py",
+        "label": "Settings"
+      },
+      {
+        "route": "/audit",
+        "score": 0,
+        "source": "rmr_platform/routes/system.py",
+        "label": "Settings"
+      },
+      {
+        "route": "/login",
+        "score": 0,
+        "source": "rmr_platform/routes/auth.py",
+        "label": "Settings"
+      },
+      {
+        "route": "/static",
+        "score": 0,
+        "source": "rmr_platform/main.py",
+        "label": "Settings"
+      },
+      {
+        "route": "/status",
+        "score": 0,
+        "source": "rmr_platform/routes/setup.py",
+        "label": "Team"
+      },
+      {
+        "route": "/health",
+        "score": 0,
+        "source": "rmr_platform/routes/system.py",
+        "label": "Settings"
+      },
+      {
+        "route": "/complete",
+        "score": 0,
+        "source": "rmr_platform/routes/setup.py",
+        "label": "Settings"
+      },
+      {
+        "route": "/training",
+        "score": 0,
+        "source": "rmr_platform/routes/training.py",
+        "label": "Settings"
+      }
+    ],
+    "preferred": "/api"
+  },
+  "portfolio": {
+    "aliases": [
+      "Portfolio Command Center",
+      "Return to Portfolio"
+    ],
+    "candidates": [
+      {
+        "route": "/api/portfolio/summary",
+        "score": 5,
+        "source": "public/pages/admin.js",
+        "label": "Portfolio Command Center"
+      },
+      {
+        "route": "/commercial#custody",
+        "score": 2,
+        "source": "public/cb1_enhancements.js",
+        "label": "Return to Portfolio"
+      },
+      {
+        "route": "/commercial#access",
+        "score": 0,
+        "source": "public/cb1_enhancements.js",
+        "label": "Return to Portfolio"
+      },
+      {
+        "route": "/cb1/assets/cb1.css?v=5.2.1-client-admin-correction-po1",
+        "score": 0,
+        "source": "templates/cb1_commercial.html",
+        "label": "Return to Portfolio"
+      },
+      {
+        "route": "/api/cb1",
+        "score": -5,
+        "source": "templates/cb1_commercial.html",
+        "label": "Return to Portfolio"
+      },
+      {
+        "route": "/api/cb1/business-health",
+        "score": -5,
+        "source": "public/cb1_enhancements.js",
+        "label": "Return to Portfolio"
+      }
+    ],
+    "preferred": "/api/portfolio/summary"
+  },
+  "client_access": {
+    "aliases": [
+      "Manage Client Access",
+      "Client Access"
+    ],
+    "candidates": [
+      {
+        "route": "/commercial#access",
+        "score": 2,
+        "source": "public/cb1_enhancements.js",
+        "label": "Manage Client Access"
+      },
+      {
+        "route": "/readiness",
+        "score": 0,
+        "source": "public/cb1_enhancements.js",
+        "label": "Client Access"
+      },
+      {
+        "route": "/commercial",
+        "score": 0,
+        "source": "public/cb1_enhancements.js",
+        "label": "Manage Client Access"
+      },
+      {
+        "route": "/demo-users",
+        "score": 0,
+        "source": "rmr_platform/routes/auth.py",
+        "label": "Client Access"
+      },
+      {
+        "route": "/onboarding",
+        "score": 0,
+        "source": "rmr_platform/routes/onboarding.py",
+        "label": "Client Access"
+      },
+      {
+        "route": "/custody/active",
+        "score": 0,
+        "source": "public/cb1_enhancements.js",
+        "label": "Client Access"
+      },
+      {
+        "route": "/commercial#custody",
+        "score": 0,
+        "source": "public/cb1_enhancements.js",
+        "label": "Manage Client Access"
+      },
+      {
+        "route": "/invitations/accept",
+        "score": 0,
+        "source": "rmr_platform/routes/auth.py",
+        "label": "Client Access"
+      }
+    ],
+    "preferred": "/commercial#access"
+  }
+}

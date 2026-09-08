@@ -1,0 +1,18 @@
+RMR PLATFORM — PROPRIETARY SOFTWARE NOTICE
+
+Copyright (c) 2026 Real Marketing Results, LLC. All rights reserved.
+
+RMR Platform, its source code, architecture, data models, workflows, design system,
+Service Catalog, Partner Economics implementation, Website Studio, ProspectIQ
+integration concepts, documentation, and related intellectual property are owned by
+Real Marketing Results, LLC.
+
+This package is provided only for authorized evaluation, installation, operation,
+and support on behalf of Real Marketing Results, LLC. No ownership, assignment,
+license for resale, sublicensing right, or right to create derivative commercial
+products is granted except under a separate written agreement signed by Real
+Marketing Results, LLC.
+
+Do not redistribute, publish, reverse engineer for competitive use, remove ownership
+notices, or make untracked production source changes. Operational collaborators may
+receive access only as authorized by Real Marketing Results, LLC.

@@ -1,0 +1,40 @@
+services:
+  app:
+    image: ${RMR_IMAGE_REPOSITORY:-rmr-global}:${RMR_IMAGE_TAG:-5.4.1.2-interaction-regression-correction-po1-v5412c}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        RMR_PACKAGE_REVISION: V5412C
+    restart: unless-stopped
+    user: "${RMR_CONTAINER_UID:-10001}:${RMR_CONTAINER_GID:-10001}"
+    env_file:
+      - .env.product-owner-v5412c
+    environment:
+      RMR_APP_VERSION: 5.4.1.2-interaction-regression-correction-po1
+      RMR_COMMERCIAL_VERSION: 5.4.1.2-interaction-regression-correction-po1
+      RMR_HOST: 0.0.0.0
+      RMR_PORT: 8000
+      RMR_DATA_DIR: /data
+      RMR_INSTALL_PROFILE: demo
+      RMR_AUTO_MIGRATE: "true"
+      RMR_AUTO_SEED: "true"
+      RMR_ALLOW_DEMO_CREDENTIALS: "true"
+      RMR_PAYMENT_PROVIDER: mock
+      RMR_PROVIDER_MODE: mock
+      RMR_AI_MODE: safe-template
+      RMR_AI_PROVIDER: demonstration
+      RMR_PIQ_DISCOVERY_PROVIDER: demonstration
+      RMR_PIQ_RESEARCH_PROVIDER: demonstration
+      RMR_SYSTEM_EMAIL_PROVIDER: local
+      RMR_EXTERNAL_SITE_LIVE_TEST: "false"
+    ports:
+      - "${RMR_PUBLIC_PORT:-8089}:8000"
+    volumes:
+      - ./product-owner-data-v5412c:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=5)); raise SystemExit(0 if d.get('status')=='healthy' and d.get('version')=='5.4.1.2-interaction-regression-correction-po1' else 1)"]
+      interval: 10s
+      timeout: 8s
+      start_period: 20s
+      retries: 18

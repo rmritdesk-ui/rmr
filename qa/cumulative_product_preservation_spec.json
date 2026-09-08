@@ -1,0 +1,3422 @@
+{
+  "schema_version": 1,
+  "base_release": "5.1.0-commercial-cb1-r2",
+  "base_artifact_sha256": "2c528badcf90c1683d68f45a59d5d5004cc82cf3ed1d8d4bd1c4fb901b6fc22f",
+  "candidate_release": "5.2.1-client-admin-correction-po1",
+  "policy": {
+    "cumulative_by_default": true,
+    "baseline_source_deletion_allowed": false,
+    "absence_from_new_scope_does_not_authorize_removal": true,
+    "source_presence_alone_is_not_final_behavioral_acceptance": true,
+    "behavioral_replacement_requires_product_owner_notice_before_change": true
+  },
+  "capabilities": [
+    {
+      "id": "CORE-001",
+      "name": "Tenant authentication and login",
+      "terms": [
+        "/api/auth/me",
+        "login"
+      ],
+      "category": "Core",
+      "baseline_present": true,
+      "matched_terms": [
+        "/api/auth/me",
+        "login"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/security.py",
+          "line": 88,
+          "term": "/api/auth/me"
+        },
+        {
+          "file": "public/app.js",
+          "line": 34,
+          "term": "/api/auth/me"
+        },
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 38,
+          "term": "login"
+        },
+        {
+          "file": "rmr_platform/cb1_worker.py",
+          "line": 24,
+          "term": "login"
+        },
+        {
+          "file": "rmr_platform/main.py",
+          "line": 48,
+          "term": "login"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 9,
+          "term": "login"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 128,
+          "term": "login"
+        }
+      ]
+    },
+    {
+      "id": "CORE-002",
+      "name": "Client invitation and activation",
+      "terms": [
+        "activation",
+        "invite"
+      ],
+      "category": "Core",
+      "baseline_present": true,
+      "matched_terms": [
+        "activation",
+        "invite"
+      ],
+      "evidence": [
+        {
+          "file": ".env.example",
+          "line": 64,
+          "term": "activation"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 296,
+          "term": "activation"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 93,
+          "term": "activation"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 156,
+          "term": "activation"
+        },
+        {
+          "file": "static/commercial-console.html",
+          "line": 1,
+          "term": "activation"
+        },
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 26,
+          "term": "invite"
+        },
+        {
+          "file": "rmr_platform/cb1_migration.py",
+          "line": 9,
+          "term": "invite"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 80,
+          "term": "invite"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 123,
+          "term": "invite"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 75,
+          "term": "invite"
+        }
+      ]
+    },
+    {
+      "id": "CORE-003",
+      "name": "Tenant isolation",
+      "terms": [
+        "tenant_id",
+        "tenant"
+      ],
+      "category": "Core",
+      "baseline_present": true,
+      "matched_terms": [
+        "tenant_id",
+        "tenant"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 20,
+          "term": "tenant_id"
+        },
+        {
+          "file": "rmr_platform/permissions.py",
+          "line": 30,
+          "term": "tenant_id"
+        },
+        {
+          "file": "rmr_platform/cb1_worker.py",
+          "line": 53,
+          "term": "tenant_id"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 102,
+          "term": "tenant_id"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 38,
+          "term": "tenant_id"
+        },
+        {
+          "file": ".env.example",
+          "line": 51,
+          "term": "tenant"
+        },
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 20,
+          "term": "tenant"
+        },
+        {
+          "file": "rmr_platform/permissions.py",
+          "line": 30,
+          "term": "tenant"
+        },
+        {
+          "file": "rmr_platform/cb1_worker.py",
+          "line": 53,
+          "term": "tenant"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 42,
+          "term": "tenant"
+        }
+      ]
+    },
+    {
+      "id": "CORE-004",
+      "name": "Client role permissions",
+      "terms": [
+        "CLIENT_ADMIN",
+        "SALES_REP"
+      ],
+      "category": "Core",
+      "baseline_present": true,
+      "matched_terms": [
+        "CLIENT_ADMIN",
+        "SALES_REP"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 27,
+          "term": "CLIENT_ADMIN"
+        },
+        {
+          "file": "rmr_platform/permissions.py",
+          "line": 9,
+          "term": "CLIENT_ADMIN"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 42,
+          "term": "CLIENT_ADMIN"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 96,
+          "term": "CLIENT_ADMIN"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 386,
+          "term": "CLIENT_ADMIN"
+        },
+        {
+          "file": "rmr_platform/permissions.py",
+          "line": 12,
+          "term": "SALES_REP"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 42,
+          "term": "SALES_REP"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 416,
+          "term": "SALES_REP"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 206,
+          "term": "SALES_REP"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 111,
+          "term": "SALES_REP"
+        }
+      ]
+    },
+    {
+      "id": "CORE-005",
+      "name": "Client team and user management",
+      "terms": [
+        "Invite team member",
+        "Client Administrator"
+      ],
+      "category": "Core",
+      "baseline_present": true,
+      "matched_terms": [
+        "Invite team member",
+        "Client Administrator"
+      ],
+      "evidence": [
+        {
+          "file": "public/pages/client.js",
+          "line": 199,
+          "term": "Invite team member"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 134,
+          "term": "Client Administrator"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 562,
+          "term": "Client Administrator"
+        },
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 18,
+          "term": "Client Administrator"
+        },
+        {
+          "file": "templates/cb1_activate.html",
+          "line": 1,
+          "term": "Client Administrator"
+        },
+        {
+          "file": "public/cb1_enhancements.js",
+          "line": 1,
+          "term": "Client Administrator"
+        }
+      ]
+    },
+    {
+      "id": "RMR-001",
+      "name": "Portfolio Command Center",
+      "terms": [
+        "Portfolio Command Center"
+      ],
+      "category": "RMR Operations",
+      "baseline_present": true,
+      "matched_terms": [
+        "Portfolio Command Center"
+      ],
+      "evidence": [
+        {
+          "file": "public/ui.js",
+          "line": 80,
+          "term": "Portfolio Command Center"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 30,
+          "term": "Portfolio Command Center"
+        }
+      ]
+    },
+    {
+      "id": "RMR-002",
+      "name": "Client 360",
+      "terms": [
+        "Client 360"
+      ],
+      "category": "RMR Operations",
+      "baseline_present": true,
+      "matched_terms": [
+        "Client 360"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/services.py",
+          "line": 211,
+          "term": "Client 360"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 460,
+          "term": "Client 360"
+        },
+        {
+          "file": "public/cb1_enhancements.js",
+          "line": 1,
+          "term": "Client 360"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 27,
+          "term": "Client 360"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 33,
+          "term": "Client 360"
+        }
+      ]
+    },
+    {
+      "id": "RMR-003",
+      "name": "Shared onboarding",
+      "terms": [
+        "Shared Onboarding",
+        "Client Onboarding"
+      ],
+      "category": "RMR Operations",
+      "baseline_present": false,
+      "matched_terms": [
+        "Client Onboarding"
+      ],
+      "evidence": [
+        {
+          "file": "public/cb1_enhancements.js",
+          "line": 1,
+          "term": "Client Onboarding"
+        },
+        {
+          "file": "public/ui.js",
+          "line": 84,
+          "term": "Client Onboarding"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 86,
+          "term": "Client Onboarding"
+        }
+      ]
+    },
+    {
+      "id": "RMR-004",
+      "name": "Client pricing",
+      "terms": [
+        "Client Pricing"
+      ],
+      "category": "RMR Operations",
+      "baseline_present": true,
+      "matched_terms": [
+        "Client Pricing"
+      ],
+      "evidence": [
+        {
+          "file": "public/ui.js",
+          "line": 82,
+          "term": "Client Pricing"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 30,
+          "term": "Client Pricing"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 86,
+          "term": "Client Pricing"
+        },
+        {
+          "file": "rmr_platform/routes/solutions.py",
+          "line": 81,
+          "term": "Client Pricing"
+        },
+        {
+          "file": "rmr_platform/routes/portfolio.py",
+          "line": 552,
+          "term": "Client Pricing"
+        }
+      ]
+    },
+    {
+      "id": "RMR-005",
+      "name": "Partner economics and revenue share",
+      "terms": [
+        "Partner Economics",
+        "revenue share"
+      ],
+      "category": "RMR Operations",
+      "baseline_present": true,
+      "matched_terms": [
+        "Partner Economics",
+        "revenue share"
+      ],
+      "evidence": [
+        {
+          "file": "public/ui.js",
+          "line": 83,
+          "term": "Partner Economics"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 144,
+          "term": "Partner Economics"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 49,
+          "term": "revenue share"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 149,
+          "term": "revenue share"
+        }
+      ]
+    },
+    {
+      "id": "RMR-006",
+      "name": "Service activation and entitlements",
+      "terms": [
+        "entitlement",
+        "service"
+      ],
+      "category": "RMR Operations",
+      "baseline_present": true,
+      "matched_terms": [
+        "entitlement",
+        "service"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 49,
+          "term": "entitlement"
+        },
+        {
+          "file": "rmr_platform/cb1_migration.py",
+          "line": 10,
+          "term": "entitlement"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 130,
+          "term": "entitlement"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 80,
+          "term": "entitlement"
+        },
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 6,
+          "term": "entitlement"
+        },
+        {
+          "file": "docker-compose.yml",
+          "line": 1,
+          "term": "service"
+        },
+        {
+          "file": "docker-compose.postgres.yml",
+          "line": 1,
+          "term": "service"
+        },
+        {
+          "file": "rmr_platform/cb1_worker.py",
+          "line": 8,
+          "term": "service"
+        },
+        {
+          "file": "rmr_platform/main.py",
+          "line": 21,
+          "term": "service"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 71,
+          "term": "service"
+        }
+      ]
+    },
+    {
+      "id": "RMR-007",
+      "name": "Service requests",
+      "terms": [
+        "Service Requests"
+      ],
+      "category": "RMR Operations",
+      "baseline_present": true,
+      "matched_terms": [
+        "Service Requests"
+      ],
+      "evidence": [
+        {
+          "file": "public/ui.js",
+          "line": 85,
+          "term": "Service Requests"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 30,
+          "term": "Service Requests"
+        }
+      ]
+    },
+    {
+      "id": "RMR-008",
+      "name": "Client success intelligence",
+      "terms": [
+        "Client Success Intelligence"
+      ],
+      "category": "RMR Operations",
+      "baseline_present": true,
+      "matched_terms": [
+        "Client Success Intelligence"
+      ],
+      "evidence": [
+        {
+          "file": "public/ui.js",
+          "line": 81,
+          "term": "Client Success Intelligence"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 122,
+          "term": "Client Success Intelligence"
+        }
+      ]
+    },
+    {
+      "id": "WEB-001",
+      "name": "Managed website mode",
+      "terms": [
+        "managed",
+        "website_mode"
+      ],
+      "category": "Website",
+      "baseline_present": true,
+      "matched_terms": [
+        "managed",
+        "website_mode"
+      ],
+      "evidence": [
+        {
+          "file": ".env.example",
+          "line": 53,
+          "term": "managed"
+        },
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 38,
+          "term": "managed"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 76,
+          "term": "managed"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 128,
+          "term": "managed"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 101,
+          "term": "managed"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 76,
+          "term": "website_mode"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 92,
+          "term": "website_mode"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 39,
+          "term": "website_mode"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 33,
+          "term": "website_mode"
+        },
+        {
+          "file": "rmr_platform/routes/portfolio.py",
+          "line": 89,
+          "term": "website_mode"
+        }
+      ]
+    },
+    {
+      "id": "WEB-002",
+      "name": "External connected website mode",
+      "terms": [
+        "external",
+        "website_mode"
+      ],
+      "category": "Website",
+      "baseline_present": true,
+      "matched_terms": [
+        "external",
+        "website_mode"
+      ],
+      "evidence": [
+        {
+          "file": ".env.example",
+          "line": 64,
+          "term": "external"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 76,
+          "term": "external"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 138,
+          "term": "external"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 103,
+          "term": "external"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 63,
+          "term": "external"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 76,
+          "term": "website_mode"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 92,
+          "term": "website_mode"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 39,
+          "term": "website_mode"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 33,
+          "term": "website_mode"
+        },
+        {
+          "file": "rmr_platform/routes/portfolio.py",
+          "line": 89,
+          "term": "website_mode"
+        }
+      ]
+    },
+    {
+      "id": "WEB-003",
+      "name": "Website Studio",
+      "terms": [
+        "Website Studio"
+      ],
+      "category": "Website",
+      "baseline_present": true,
+      "matched_terms": [
+        "Website Studio"
+      ],
+      "evidence": [
+        {
+          "file": "public/ui.js",
+          "line": 99,
+          "term": "Website Studio"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 180,
+          "term": "Website Studio"
+        }
+      ]
+    },
+    {
+      "id": "WEB-004",
+      "name": "Website page and section editing",
+      "terms": [
+        "seo_title",
+        "sections"
+      ],
+      "category": "Website",
+      "baseline_present": true,
+      "matched_terms": [
+        "seo_title",
+        "sections"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 257,
+          "term": "seo_title"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 346,
+          "term": "seo_title"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 398,
+          "term": "seo_title"
+        },
+        {
+          "file": "templates/public_site.html",
+          "line": 6,
+          "term": "seo_title"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 191,
+          "term": "seo_title"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 351,
+          "term": "sections"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 403,
+          "term": "sections"
+        },
+        {
+          "file": "templates/public_site.html",
+          "line": 34,
+          "term": "sections"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 176,
+          "term": "sections"
+        },
+        {
+          "file": "rmr_platform/routes/website.py",
+          "line": 26,
+          "term": "sections"
+        }
+      ]
+    },
+    {
+      "id": "WEB-005",
+      "name": "Website publishing and preview",
+      "terms": [
+        "publish",
+        "preview"
+      ],
+      "category": "Website",
+      "baseline_present": true,
+      "matched_terms": [
+        "publish",
+        "preview"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 167,
+          "term": "publish"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 94,
+          "term": "publish"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 334,
+          "term": "publish"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 94,
+          "term": "publish"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 348,
+          "term": "publish"
+        },
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 38,
+          "term": "preview"
+        },
+        {
+          "file": "templates/public_site.html",
+          "line": 13,
+          "term": "preview"
+        },
+        {
+          "file": "public/styles.css",
+          "line": 19,
+          "term": "preview"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 181,
+          "term": "preview"
+        },
+        {
+          "file": "rmr_platform/routes/solutions.py",
+          "line": 56,
+          "term": "preview"
+        }
+      ]
+    },
+    {
+      "id": "WEB-006",
+      "name": "Public website rendering",
+      "terms": [
+        "public",
+        "website"
+      ],
+      "category": "Website",
+      "baseline_present": true,
+      "matched_terms": [
+        "public",
+        "website"
+      ],
+      "evidence": [
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 150,
+          "term": "public"
+        },
+        {
+          "file": "INSTALL.ps1",
+          "line": 53,
+          "term": "public"
+        },
+        {
+          "file": "docker-compose.yml",
+          "line": 28,
+          "term": "public"
+        },
+        {
+          "file": ".env.example",
+          "line": 5,
+          "term": "public"
+        },
+        {
+          "file": "COLLECT-DIAGNOSTICS.sh",
+          "line": 14,
+          "term": "public"
+        },
+        {
+          "file": "rmr_platform/permissions.py",
+          "line": 17,
+          "term": "website"
+        },
+        {
+          "file": "rmr_platform/main.py",
+          "line": 21,
+          "term": "website"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 76,
+          "term": "website"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 101,
+          "term": "website"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 35,
+          "term": "website"
+        }
+      ]
+    },
+    {
+      "id": "WEB-007",
+      "name": "Website lead capture",
+      "terms": [
+        "lead",
+        "form"
+      ],
+      "category": "Website",
+      "baseline_present": true,
+      "matched_terms": [
+        "lead",
+        "form"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/main.py",
+          "line": 48,
+          "term": "lead"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 176,
+          "term": "lead"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 146,
+          "term": "lead"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 14,
+          "term": "lead"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 20,
+          "term": "lead"
+        },
+        {
+          "file": "STOP.ps1",
+          "line": 4,
+          "term": "form"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 9,
+          "term": "form"
+        },
+        {
+          "file": "POSTGRESQL-CERTIFY.ps1",
+          "line": 21,
+          "term": "form"
+        },
+        {
+          "file": "INSTALL.ps1",
+          "line": 48,
+          "term": "form"
+        },
+        {
+          "file": "docker-compose.yml",
+          "line": 3,
+          "term": "form"
+        }
+      ]
+    },
+    {
+      "id": "WEB-008",
+      "name": "SEO metadata controls",
+      "terms": [
+        "seo_title",
+        "seo_description"
+      ],
+      "category": "Website",
+      "baseline_present": true,
+      "matched_terms": [
+        "seo_title",
+        "seo_description"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 257,
+          "term": "seo_title"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 346,
+          "term": "seo_title"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 398,
+          "term": "seo_title"
+        },
+        {
+          "file": "templates/public_site.html",
+          "line": 6,
+          "term": "seo_title"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 191,
+          "term": "seo_title"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 258,
+          "term": "seo_description"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 347,
+          "term": "seo_description"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 399,
+          "term": "seo_description"
+        },
+        {
+          "file": "templates/public_site.html",
+          "line": 7,
+          "term": "seo_description"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 191,
+          "term": "seo_description"
+        }
+      ]
+    },
+    {
+      "id": "CRM-001",
+      "name": "CRM accounts",
+      "terms": [
+        "Accounts",
+        "account"
+      ],
+      "category": "CRM",
+      "baseline_present": true,
+      "matched_terms": [
+        "Accounts",
+        "account"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/services.py",
+          "line": 219,
+          "term": "Accounts"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 347,
+          "term": "Accounts"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 230,
+          "term": "Accounts"
+        },
+        {
+          "file": "static/commercial-console.html",
+          "line": 1,
+          "term": "Accounts"
+        },
+        {
+          "file": "public/app.js",
+          "line": 169,
+          "term": "Accounts"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 144,
+          "term": "account"
+        },
+        {
+          "file": "rmr_platform/cli.py",
+          "line": 86,
+          "term": "account"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 9,
+          "term": "account"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 11,
+          "term": "account"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 347,
+          "term": "account"
+        }
+      ]
+    },
+    {
+      "id": "CRM-002",
+      "name": "CRM leads",
+      "terms": [
+        "Leads",
+        "lead"
+      ],
+      "category": "CRM",
+      "baseline_present": true,
+      "matched_terms": [
+        "Leads",
+        "lead"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/services.py",
+          "line": 221,
+          "term": "Leads"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 568,
+          "term": "Leads"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 260,
+          "term": "Leads"
+        },
+        {
+          "file": "public/public-site.js",
+          "line": 11,
+          "term": "Leads"
+        },
+        {
+          "file": "public/state.js",
+          "line": 14,
+          "term": "Leads"
+        },
+        {
+          "file": "rmr_platform/main.py",
+          "line": 48,
+          "term": "lead"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 176,
+          "term": "lead"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 146,
+          "term": "lead"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 14,
+          "term": "lead"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 20,
+          "term": "lead"
+        }
+      ]
+    },
+    {
+      "id": "CRM-003",
+      "name": "CRM contacts",
+      "terms": [
+        "Contacts",
+        "contact"
+      ],
+      "category": "CRM",
+      "baseline_present": true,
+      "matched_terms": [
+        "Contacts",
+        "contact"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/models.py",
+          "line": 246,
+          "term": "Contacts"
+        },
+        {
+          "file": "public/state.js",
+          "line": 14,
+          "term": "Contacts"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 37,
+          "term": "Contacts"
+        },
+        {
+          "file": "rmr_platform/commercial/middleware.py",
+          "line": 6,
+          "term": "Contacts"
+        },
+        {
+          "file": "rmr_platform/routes/crm.py",
+          "line": 146,
+          "term": "Contacts"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 78,
+          "term": "contact"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 15,
+          "term": "contact"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 46,
+          "term": "contact"
+        },
+        {
+          "file": "templates/public_site.html",
+          "line": 17,
+          "term": "contact"
+        },
+        {
+          "file": "tests/test_commercial_candidate.py",
+          "line": 20,
+          "term": "contact"
+        }
+      ]
+    },
+    {
+      "id": "CRM-004",
+      "name": "CRM opportunities",
+      "terms": [
+        "Opportunities",
+        "opportunity"
+      ],
+      "category": "CRM",
+      "baseline_present": true,
+      "matched_terms": [
+        "Opportunities",
+        "opportunity"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/services.py",
+          "line": 220,
+          "term": "Opportunities"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 568,
+          "term": "Opportunities"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 275,
+          "term": "Opportunities"
+        },
+        {
+          "file": "public/state.js",
+          "line": 14,
+          "term": "Opportunities"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 29,
+          "term": "Opportunities"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 187,
+          "term": "opportunity"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 18,
+          "term": "opportunity"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 24,
+          "term": "opportunity"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 274,
+          "term": "opportunity"
+        },
+        {
+          "file": "public/app.js",
+          "line": 169,
+          "term": "opportunity"
+        }
+      ]
+    },
+    {
+      "id": "CRM-005",
+      "name": "CRM activities",
+      "terms": [
+        "Activities",
+        "activity"
+      ],
+      "category": "CRM",
+      "baseline_present": true,
+      "matched_terms": [
+        "Activities",
+        "activity"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/models.py",
+          "line": 294,
+          "term": "Activities"
+        },
+        {
+          "file": "public/state.js",
+          "line": 14,
+          "term": "Activities"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 37,
+          "term": "Activities"
+        },
+        {
+          "file": "rmr_platform/routes/crm.py",
+          "line": 148,
+          "term": "Activities"
+        },
+        {
+          "file": "rmr_platform/permissions.py",
+          "line": 39,
+          "term": "activity"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 209,
+          "term": "activity"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 235,
+          "term": "activity"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 12,
+          "term": "activity"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 293,
+          "term": "activity"
+        }
+      ]
+    },
+    {
+      "id": "CRM-006",
+      "name": "Lead conversion",
+      "terms": [
+        "convert",
+        "opportunity"
+      ],
+      "category": "CRM",
+      "baseline_present": true,
+      "matched_terms": [
+        "convert",
+        "opportunity"
+      ],
+      "evidence": [
+        {
+          "file": "ROLLBACK-TO-V5.1-CANDIDATE.ps1",
+          "line": 12,
+          "term": "convert"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 77,
+          "term": "convert"
+        },
+        {
+          "file": "RUN-CB1-AUTOMATED-QC.ps1",
+          "line": 24,
+          "term": "convert"
+        },
+        {
+          "file": "START-PRODUCT-OWNER-TEST.bat",
+          "line": 8,
+          "term": "convert"
+        },
+        {
+          "file": "HEALTH-CHECK.ps1",
+          "line": 31,
+          "term": "convert"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 187,
+          "term": "opportunity"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 18,
+          "term": "opportunity"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 24,
+          "term": "opportunity"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 274,
+          "term": "opportunity"
+        },
+        {
+          "file": "public/app.js",
+          "line": 169,
+          "term": "opportunity"
+        }
+      ]
+    },
+    {
+      "id": "CRM-007",
+      "name": "Pipeline stage and value management",
+      "terms": [
+        "probability",
+        "expected_close"
+      ],
+      "category": "CRM",
+      "baseline_present": true,
+      "matched_terms": [
+        "probability",
+        "expected_close"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 194,
+          "term": "probability"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 516,
+          "term": "probability"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 284,
+          "term": "probability"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 42,
+          "term": "probability"
+        },
+        {
+          "file": "rmr_platform/routes/crm.py",
+          "line": 75,
+          "term": "probability"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 195,
+          "term": "expected_close"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 517,
+          "term": "expected_close"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 285,
+          "term": "expected_close"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 54,
+          "term": "expected_close"
+        }
+      ]
+    },
+    {
+      "id": "CRM-008",
+      "name": "Forecasting",
+      "terms": [
+        "Forecasting",
+        "forecast"
+      ],
+      "category": "CRM",
+      "baseline_present": true,
+      "matched_terms": [
+        "Forecasting",
+        "forecast"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/services.py",
+          "line": 98,
+          "term": "Forecasting"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 58,
+          "term": "Forecasting"
+        },
+        {
+          "file": "public/ui.js",
+          "line": 94,
+          "term": "Forecasting"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 27,
+          "term": "Forecasting"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 48,
+          "term": "Forecasting"
+        },
+        {
+          "file": "rmr_platform/permissions.py",
+          "line": 39,
+          "term": "forecast"
+        },
+        {
+          "file": "rmr_platform/main.py",
+          "line": 21,
+          "term": "forecast"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 218,
+          "term": "forecast"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 12,
+          "term": "forecast"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 18,
+          "term": "forecast"
+        }
+      ]
+    },
+    {
+      "id": "CRM-009",
+      "name": "Management reporting",
+      "terms": [
+        "Management Intelligence",
+        "report"
+      ],
+      "category": "CRM",
+      "baseline_present": true,
+      "matched_terms": [
+        "Management Intelligence",
+        "report"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/services.py",
+          "line": 99,
+          "term": "Management Intelligence"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 59,
+          "term": "Management Intelligence"
+        },
+        {
+          "file": "public/ui.js",
+          "line": 95,
+          "term": "Management Intelligence"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 133,
+          "term": "Management Intelligence"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 173,
+          "term": "report"
+        },
+        {
+          "file": "RUN-CB1-AUTOMATED-QC.ps1",
+          "line": 17,
+          "term": "report"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.1-CANDIDATE.ps1",
+          "line": 204,
+          "term": "report"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 99,
+          "term": "report"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 460,
+          "term": "report"
+        }
+      ]
+    },
+    {
+      "id": "PIQ-001",
+      "name": "ProspectIQ module",
+      "terms": [
+        "ProspectIQ"
+      ],
+      "category": "ProspectIQ",
+      "baseline_present": true,
+      "matched_terms": [
+        "ProspectIQ"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/services.py",
+          "line": 105,
+          "term": "ProspectIQ"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 65,
+          "term": "ProspectIQ"
+        },
+        {
+          "file": "public/ui.js",
+          "line": 96,
+          "term": "ProspectIQ"
+        },
+        {
+          "file": "public/state.js",
+          "line": 15,
+          "term": "ProspectIQ"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 106,
+          "term": "ProspectIQ"
+        }
+      ]
+    },
+    {
+      "id": "PIQ-002",
+      "name": "PIQ entitlement and access",
+      "terms": [
+        "piq",
+        "entitlement"
+      ],
+      "category": "ProspectIQ",
+      "baseline_present": true,
+      "matched_terms": [
+        "piq",
+        "entitlement"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 114,
+          "term": "piq"
+        },
+        {
+          "file": "rmr_platform/cb1_worker.py",
+          "line": 60,
+          "term": "piq"
+        },
+        {
+          "file": "rmr_platform/main.py",
+          "line": 21,
+          "term": "piq"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 318,
+          "term": "piq"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 105,
+          "term": "piq"
+        },
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 49,
+          "term": "entitlement"
+        },
+        {
+          "file": "rmr_platform/cb1_migration.py",
+          "line": 10,
+          "term": "entitlement"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 130,
+          "term": "entitlement"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 80,
+          "term": "entitlement"
+        },
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 6,
+          "term": "entitlement"
+        }
+      ]
+    },
+    {
+      "id": "PIQ-003",
+      "name": "PIQ record enhancement",
+      "terms": [
+        "enhancement",
+        "prospect"
+      ],
+      "category": "ProspectIQ",
+      "baseline_present": true,
+      "matched_terms": [
+        "enhancement",
+        "prospect"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/services.py",
+          "line": 106,
+          "term": "enhancement"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 66,
+          "term": "enhancement"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 98,
+          "term": "enhancement"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 504,
+          "term": "enhancement"
+        },
+        {
+          "file": "templates/cb1_activate.html",
+          "line": 1,
+          "term": "enhancement"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 192,
+          "term": "prospect"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 105,
+          "term": "prospect"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 65,
+          "term": "prospect"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 404,
+          "term": "prospect"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 282,
+          "term": "prospect"
+        }
+      ]
+    },
+    {
+      "id": "MKT-001",
+      "name": "Campaigns and Content",
+      "terms": [
+        "Campaigns & Content",
+        "campaign"
+      ],
+      "category": "Marketing",
+      "baseline_present": true,
+      "matched_terms": [
+        "Campaigns & Content",
+        "campaign"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 68,
+          "term": "Campaigns & Content"
+        },
+        {
+          "file": "public/ui.js",
+          "line": 98,
+          "term": "Campaigns & Content"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 166,
+          "term": "Campaigns & Content"
+        },
+        {
+          "file": "rmr_platform/routes/portfolio.py",
+          "line": 610,
+          "term": "Campaigns & Content"
+        },
+        {
+          "file": ".env.example",
+          "line": 75,
+          "term": "campaign"
+        },
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 104,
+          "term": "campaign"
+        },
+        {
+          "file": "rmr_platform/permissions.py",
+          "line": 18,
+          "term": "campaign"
+        },
+        {
+          "file": "rmr_platform/cb1_migration.py",
+          "line": 12,
+          "term": "campaign"
+        },
+        {
+          "file": "rmr_platform/cb1_worker.py",
+          "line": 50,
+          "term": "campaign"
+        }
+      ]
+    },
+    {
+      "id": "MKT-002",
+      "name": "Social content generation",
+      "terms": [
+        "Facebook",
+        "Instagram",
+        "LinkedIn",
+        "Copy Post"
+      ],
+      "category": "Marketing",
+      "baseline_present": true,
+      "matched_terms": [
+        "Facebook",
+        "Instagram",
+        "LinkedIn",
+        "Copy Post"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 610,
+          "term": "Facebook"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 444,
+          "term": "Facebook"
+        },
+        {
+          "file": "static/commercial-console.html",
+          "line": 1,
+          "term": "Facebook"
+        },
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 45,
+          "term": "Facebook"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 171,
+          "term": "Facebook"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 444,
+          "term": "Instagram"
+        },
+        {
+          "file": "static/commercial-console.html",
+          "line": 1,
+          "term": "Instagram"
+        },
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 45,
+          "term": "Instagram"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 171,
+          "term": "Instagram"
+        },
+        {
+          "file": "rmr_platform/commercial/router.py",
+          "line": 196,
+          "term": "Instagram"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 608,
+          "term": "LinkedIn"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 444,
+          "term": "LinkedIn"
+        }
+      ]
+    },
+    {
+      "id": "MKT-003",
+      "name": "Manual social publishing evidence",
+      "terms": [
+        "Mark Published",
+        "Copy Hashtags"
+      ],
+      "category": "Marketing",
+      "baseline_present": true,
+      "matched_terms": [
+        "Mark Published",
+        "Copy Hashtags"
+      ],
+      "evidence": [
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 45,
+          "term": "Mark Published"
+        },
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 45,
+          "term": "Copy Hashtags"
+        }
+      ]
+    },
+    {
+      "id": "MKT-004",
+      "name": "Connected business email",
+      "terms": [
+        "Microsoft Graph",
+        "Gmail",
+        "SMTP"
+      ],
+      "category": "Marketing",
+      "baseline_present": true,
+      "matched_terms": [
+        "Microsoft Graph",
+        "Gmail",
+        "SMTP"
+      ],
+      "evidence": [
+        {
+          "file": ".env.example",
+          "line": 64,
+          "term": "Microsoft Graph"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 470,
+          "term": "Microsoft Graph"
+        },
+        {
+          "file": ".env.example",
+          "line": 70,
+          "term": "Gmail"
+        },
+        {
+          "file": "rmr_platform/cb1_worker.py",
+          "line": 33,
+          "term": "Gmail"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 299,
+          "term": "Gmail"
+        },
+        {
+          "file": "static/commercial-console.html",
+          "line": 1,
+          "term": "Gmail"
+        },
+        {
+          "file": "tests/test_commercial_static.py",
+          "line": 10,
+          "term": "Gmail"
+        },
+        {
+          "file": "rmr_platform/cb1_worker.py",
+          "line": 3,
+          "term": "SMTP"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 300,
+          "term": "SMTP"
+        },
+        {
+          "file": "static/commercial-console.html",
+          "line": 1,
+          "term": "SMTP"
+        },
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 33,
+          "term": "SMTP"
+        },
+        {
+          "file": "tests/test_commercial_static.py",
+          "line": 10,
+          "term": "SMTP"
+        }
+      ]
+    },
+    {
+      "id": "MKT-005",
+      "name": "CRM email and activity history",
+      "terms": [
+        "email",
+        "activity"
+      ],
+      "category": "Marketing",
+      "baseline_present": true,
+      "matched_terms": [
+        "email",
+        "activity"
+      ],
+      "evidence": [
+        {
+          "file": ".env.example",
+          "line": 22,
+          "term": "email"
+        },
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 29,
+          "term": "email"
+        },
+        {
+          "file": "rmr_platform/cb1_worker.py",
+          "line": 4,
+          "term": "email"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 10,
+          "term": "email"
+        },
+        {
+          "file": "rmr_platform/cli.py",
+          "line": 31,
+          "term": "email"
+        },
+        {
+          "file": "rmr_platform/permissions.py",
+          "line": 39,
+          "term": "activity"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 209,
+          "term": "activity"
+        },
+        {
+          "file": "rmr_platform/services.py",
+          "line": 235,
+          "term": "activity"
+        },
+        {
+          "file": "rmr_platform/seed.py",
+          "line": 12,
+          "term": "activity"
+        },
+        {
+          "file": "rmr_platform/models.py",
+          "line": 293,
+          "term": "activity"
+        }
+      ]
+    },
+    {
+      "id": "MKT-006",
+      "name": "AI-assisted messaging",
+      "terms": [
+        "AI",
+        "approved-content"
+      ],
+      "category": "Marketing",
+      "baseline_present": false,
+      "matched_terms": [
+        "AI"
+      ],
+      "evidence": [
+        {
+          "file": "STOP.ps1",
+          "line": 4,
+          "term": "AI"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 43,
+          "term": "AI"
+        },
+        {
+          "file": "POSTGRESQL-CERTIFY.ps1",
+          "line": 19,
+          "term": "AI"
+        },
+        {
+          "file": "INSTALL.ps1",
+          "line": 25,
+          "term": "AI"
+        },
+        {
+          "file": "LOGS.ps1",
+          "line": 3,
+          "term": "AI"
+        }
+      ]
+    },
+    {
+      "id": "MKT-007",
+      "name": "Drip and follow-up engine",
+      "terms": [
+        "drip",
+        "unsubscribe"
+      ],
+      "category": "Marketing",
+      "baseline_present": true,
+      "matched_terms": [
+        "drip",
+        "unsubscribe"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 137,
+          "term": "drip"
+        },
+        {
+          "file": "rmr_platform/cb1_migration.py",
+          "line": 13,
+          "term": "drip"
+        },
+        {
+          "file": "rmr_platform/cb1_worker.py",
+          "line": 44,
+          "term": "drip"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 131,
+          "term": "drip"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 415,
+          "term": "drip"
+        },
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 118,
+          "term": "unsubscribe"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 428,
+          "term": "unsubscribe"
+        },
+        {
+          "file": "static/commercial-console.html",
+          "line": 1,
+          "term": "unsubscribe"
+        },
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 38,
+          "term": "unsubscribe"
+        },
+        {
+          "file": "tests/test_commercial_candidate.py",
+          "line": 28,
+          "term": "unsubscribe"
+        }
+      ]
+    },
+    {
+      "id": "MKT-008",
+      "name": "Reply bounce and suppression handling",
+      "terms": [
+        "bounce",
+        "suppression"
+      ],
+      "category": "Marketing",
+      "baseline_present": true,
+      "matched_terms": [
+        "bounce",
+        "suppression"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 118,
+          "term": "bounce"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 426,
+          "term": "bounce"
+        },
+        {
+          "file": "static/commercial-console.html",
+          "line": 1,
+          "term": "bounce"
+        },
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 38,
+          "term": "bounce"
+        },
+        {
+          "file": "rmr_platform/commercial/router.py",
+          "line": 179,
+          "term": "bounce"
+        },
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 130,
+          "term": "suppression"
+        },
+        {
+          "file": "rmr_platform/cb1_migration.py",
+          "line": 13,
+          "term": "suppression"
+        },
+        {
+          "file": "rmr_platform/cb1_worker.py",
+          "line": 53,
+          "term": "suppression"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 427,
+          "term": "suppression"
+        },
+        {
+          "file": "tests/test_commercial_candidate.py",
+          "line": 6,
+          "term": "suppression"
+        }
+      ]
+    },
+    {
+      "id": "TRN-001",
+      "name": "Training library",
+      "terms": [
+        "Training Library",
+        "training"
+      ],
+      "category": "Training",
+      "baseline_present": true,
+      "matched_terms": [
+        "Training Library",
+        "training"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/services.py",
+          "line": 93,
+          "term": "Training Library"
+        },
+        {
+          "file": "public/ui.js",
+          "line": 101,
+          "term": "Training Library"
+        },
+        {
+          "file": "public/pages/client.js",
+          "line": 30,
+          "term": "Training Library"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 181,
+          "term": "Training Library"
+        },
+        {
+          "file": "INSTALL.ps1",
+          "line": 36,
+          "term": "training"
+        },
+        {
+          "file": "INSTALL.sh",
+          "line": 17,
+          "term": "training"
+        },
+        {
+          "file": "rmr_platform/config.py",
+          "line": 36,
+          "term": "training"
+        },
+        {
+          "file": "rmr_platform/main.py",
+          "line": 21,
+          "term": "training"
+        },
+        {
+          "file": "rmr_platform/schemas.py",
+          "line": 232,
+          "term": "training"
+        }
+      ]
+    },
+    {
+      "id": "TRN-002",
+      "name": "Training administration",
+      "terms": [
+        "Training Administration"
+      ],
+      "category": "Training",
+      "baseline_present": true,
+      "matched_terms": [
+        "Training Administration"
+      ],
+      "evidence": [
+        {
+          "file": "public/ui.js",
+          "line": 86,
+          "term": "Training Administration"
+        }
+      ]
+    },
+    {
+      "id": "SEC-001",
+      "name": "Support access audit",
+      "terms": [
+        "Support Access Audit",
+        "audit"
+      ],
+      "category": "Security",
+      "baseline_present": true,
+      "matched_terms": [
+        "Support Access Audit",
+        "audit"
+      ],
+      "evidence": [
+        {
+          "file": "public/ui.js",
+          "line": 87,
+          "term": "Support Access Audit"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 184,
+          "term": "Support Access Audit"
+        },
+        {
+          "file": "RUN-CB1-AUTOMATED-QC.ps1",
+          "line": 25,
+          "term": "audit"
+        },
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 18,
+          "term": "audit"
+        },
+        {
+          "file": "rmr_platform/cb1_migration.py",
+          "line": 9,
+          "term": "audit"
+        },
+        {
+          "file": "rmr_platform/cb1_worker.py",
+          "line": 60,
+          "term": "audit"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 38,
+          "term": "audit"
+        }
+      ]
+    },
+    {
+      "id": "SEC-002",
+      "name": "Data custody and export",
+      "terms": [
+        "Data Custody",
+        "export"
+      ],
+      "category": "Security",
+      "baseline_present": true,
+      "matched_terms": [
+        "Data Custody",
+        "export"
+      ],
+      "evidence": [
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 66,
+          "term": "Data Custody"
+        },
+        {
+          "file": "static/commercial-console.html",
+          "line": 1,
+          "term": "Data Custody"
+        },
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 6,
+          "term": "Data Custody"
+        },
+        {
+          "file": "public/cb1_enhancements.js",
+          "line": 1,
+          "term": "Data Custody"
+        },
+        {
+          "file": "INSTALL.sh",
+          "line": 59,
+          "term": "export"
+        },
+        {
+          "file": "rmr_platform/cb1_models.py",
+          "line": 81,
+          "term": "export"
+        },
+        {
+          "file": "rmr_platform/cb1_migration.py",
+          "line": 11,
+          "term": "export"
+        },
+        {
+          "file": "rmr_platform/cb1_services.py",
+          "line": 157,
+          "term": "export"
+        },
+        {
+          "file": "rmr_platform/cb1_router.py",
+          "line": 14,
+          "term": "export"
+        }
+      ]
+    },
+    {
+      "id": "SEC-003",
+      "name": "System health",
+      "terms": [
+        "System Health",
+        "health"
+      ],
+      "category": "Security",
+      "baseline_present": true,
+      "matched_terms": [
+        "System Health",
+        "health"
+      ],
+      "evidence": [
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 6,
+          "term": "System Health"
+        },
+        {
+          "file": "public/cb1_enhancements.js",
+          "line": 1,
+          "term": "System Health"
+        },
+        {
+          "file": "public/ui.js",
+          "line": 88,
+          "term": "System Health"
+        },
+        {
+          "file": "public/pages/admin.js",
+          "line": 186,
+          "term": "System Health"
+        },
+        {
+          "file": "ROLLBACK-TO-V5.1-CANDIDATE.ps1",
+          "line": 30,
+          "term": "health"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 100,
+          "term": "health"
+        },
+        {
+          "file": "POSTGRESQL-CERTIFY.ps1",
+          "line": 15,
+          "term": "health"
+        },
+        {
+          "file": "INSTALL.ps1",
+          "line": 55,
+          "term": "health"
+        },
+        {
+          "file": "docker-compose.yml",
+          "line": 31,
+          "term": "health"
+        }
+      ]
+    },
+    {
+      "id": "SEC-004",
+      "name": "Commercial readiness",
+      "terms": [
+        "Commercial Readiness"
+      ],
+      "category": "Security",
+      "baseline_present": true,
+      "matched_terms": [
+        "Commercial Readiness"
+      ],
+      "evidence": [
+        {
+          "file": "templates/cb1_commercial.html",
+          "line": 1,
+          "term": "Commercial Readiness"
+        },
+        {
+          "file": "public/cb1_enhancements.js",
+          "line": 1,
+          "term": "Commercial Readiness"
+        },
+        {
+          "file": "public/index.html",
+          "line": 15,
+          "term": "Commercial Readiness"
+        }
+      ]
+    },
+    {
+      "id": "OPS-001",
+      "name": "Backup",
+      "terms": [
+        "BACKUP",
+        "backup"
+      ],
+      "category": "Deployment",
+      "baseline_present": true,
+      "matched_terms": [
+        "BACKUP",
+        "backup"
+      ],
+      "evidence": [
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 57,
+          "term": "BACKUP"
+        },
+        {
+          "file": "POSTGRESQL-CERTIFY.ps1",
+          "line": 23,
+          "term": "BACKUP"
+        },
+        {
+          "file": "INSTALL.ps1",
+          "line": 36,
+          "term": "BACKUP"
+        },
+        {
+          "file": "UPDATE.ps1",
+          "line": 4,
+          "term": "BACKUP"
+        },
+        {
+          "file": "ROLLBACK.sh",
+          "line": 4,
+          "term": "BACKUP"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 57,
+          "term": "backup"
+        },
+        {
+          "file": "POSTGRESQL-CERTIFY.ps1",
+          "line": 23,
+          "term": "backup"
+        },
+        {
+          "file": "INSTALL.ps1",
+          "line": 36,
+          "term": "backup"
+        },
+        {
+          "file": "UPDATE.ps1",
+          "line": 4,
+          "term": "backup"
+        },
+        {
+          "file": "ROLLBACK.sh",
+          "line": 4,
+          "term": "backup"
+        }
+      ]
+    },
+    {
+      "id": "OPS-002",
+      "name": "Upgrade",
+      "terms": [
+        "UPGRADE",
+        "upgrade"
+      ],
+      "category": "Deployment",
+      "baseline_present": true,
+      "matched_terms": [
+        "UPGRADE",
+        "upgrade"
+      ],
+      "evidence": [
+        {
+          "file": "ROLLBACK-TO-V5.1-CANDIDATE.ps1",
+          "line": 9,
+          "term": "UPGRADE"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 11,
+          "term": "UPGRADE"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.sh",
+          "line": 5,
+          "term": "UPGRADE"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.1-CANDIDATE.bat",
+          "line": 4,
+          "term": "UPGRADE"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.1-CANDIDATE.ps1",
+          "line": 11,
+          "term": "UPGRADE"
+        },
+        {
+          "file": "ROLLBACK-TO-V5.1-CANDIDATE.ps1",
+          "line": 9,
+          "term": "upgrade"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 11,
+          "term": "upgrade"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.sh",
+          "line": 5,
+          "term": "upgrade"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.1-CANDIDATE.bat",
+          "line": 4,
+          "term": "upgrade"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.1-CANDIDATE.ps1",
+          "line": 11,
+          "term": "upgrade"
+        }
+      ]
+    },
+    {
+      "id": "OPS-003",
+      "name": "Verified rollback",
+      "terms": [
+        "ROLLBACK",
+        "rollback"
+      ],
+      "category": "Deployment",
+      "baseline_present": true,
+      "matched_terms": [
+        "ROLLBACK",
+        "rollback"
+      ],
+      "evidence": [
+        {
+          "file": "ROLLBACK-TO-V5.1-CANDIDATE.ps1",
+          "line": 7,
+          "term": "ROLLBACK"
+        },
+        {
+          "file": "ROLLBACK-TO-V5.1-CANDIDATE.bat",
+          "line": 4,
+          "term": "ROLLBACK"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 56,
+          "term": "ROLLBACK"
+        },
+        {
+          "file": "ROLLBACK.sh",
+          "line": 4,
+          "term": "ROLLBACK"
+        },
+        {
+          "file": "ROLLBACK.ps1",
+          "line": 22,
+          "term": "ROLLBACK"
+        },
+        {
+          "file": "ROLLBACK-TO-V5.1-CANDIDATE.ps1",
+          "line": 7,
+          "term": "rollback"
+        },
+        {
+          "file": "ROLLBACK-TO-V5.1-CANDIDATE.bat",
+          "line": 4,
+          "term": "rollback"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 56,
+          "term": "rollback"
+        },
+        {
+          "file": "ROLLBACK.sh",
+          "line": 4,
+          "term": "rollback"
+        },
+        {
+          "file": "ROLLBACK.ps1",
+          "line": 22,
+          "term": "rollback"
+        }
+      ]
+    },
+    {
+      "id": "OPS-004",
+      "name": "Diagnostic capture",
+      "terms": [
+        "diagnostic",
+        "stderr"
+      ],
+      "category": "Deployment",
+      "baseline_present": true,
+      "matched_terms": [
+        "diagnostic",
+        "stderr"
+      ],
+      "evidence": [
+        {
+          "file": "ROLLBACK-TO-V5.1-CANDIDATE.ps1",
+          "line": 39,
+          "term": "diagnostic"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.0.ps1",
+          "line": 10,
+          "term": "diagnostic"
+        },
+        {
+          "file": "POSTGRESQL-CERTIFY.ps1",
+          "line": 28,
+          "term": "diagnostic"
+        },
+        {
+          "file": "INSTALL.ps1",
+          "line": 36,
+          "term": "diagnostic"
+        },
+        {
+          "file": "COLLECT-DIAGNOSTICS.ps1",
+          "line": 3,
+          "term": "diagnostic"
+        },
+        {
+          "file": "UPGRADE-FROM-V5.1-CANDIDATE.ps1",
+          "line": 62,
+          "term": "stderr"
+        },
+        {
+          "file": "rmr_platform/cli.py",
+          "line": 78,
+          "term": "stderr"
+        }
+      ]
+    }
+  ],
+  "forensic_matrix": {
+    "source_file": "RMR_Software_v5.1_CB1-R2_Forensic_Capability_Matrix.xlsx",
+    "sha256": null,
+    "rows": 0
+  },
+  "route_map": {
+    "dashboard": {
+      "aliases": [
+        "Customer Workspace",
+        "Dashboard",
+        "Home"
+      ],
+      "candidates": [
+        {
+          "route": "/activate/",
+          "score": 0,
+          "source": "public/app.js",
+          "label": "Home"
+        },
+        {
+          "route": "/reset-password/",
+          "score": 0,
+          "source": "public/app.js",
+          "label": "Home"
+        },
+        {
+          "route": "/sites/{site_slug}",
+          "score": -2,
+          "source": "rmr_platform/routes/website.py",
+          "label": "Home"
+        },
+        {
+          "route": "/tenants/{tenant_id}/success",
+          "score": -2,
+          "source": "rmr_platform/routes/portfolio.py",
+          "label": "Home"
+        },
+        {
+          "route": "/api/auth/me",
+          "score": -5,
+          "source": "public/app.js",
+          "label": "Home"
+        },
+        {
+          "route": "/api/tenants",
+          "score": -5,
+          "source": "public/app.js",
+          "label": "Home"
+        },
+        {
+          "route": "/api/auth/logout",
+          "score": -5,
+          "source": "public/app.js",
+          "label": "Home"
+        },
+        {
+          "route": "/api/setup/status",
+          "score": -5,
+          "source": "public/app.js",
+          "label": "Home"
+        }
+      ],
+      "preferred": "/activate/"
+    },
+    "website": {
+      "aliases": [
+        "Website Studio",
+        "Website"
+      ],
+      "candidates": [
+        {
+          "route": "/api/website/sections/",
+          "score": 5,
+          "source": "rmr_platform/routes/website.py",
+          "label": "Website"
+        },
+        {
+          "route": "/api/website/pages/{page_id}",
+          "score": 3,
+          "source": "rmr_platform/routes/website.py",
+          "label": "Website"
+        },
+        {
+          "route": "/api/tenants/{tenant_id}/website",
+          "score": 3,
+          "source": "rmr_platform/routes/website.py",
+          "label": "Website"
+        },
+        {
+          "route": "/api/website/sections/{section_id}",
+          "score": 3,
+          "source": "rmr_platform/routes/website.py",
+          "label": "Website"
+        },
+        {
+          "route": "/api/tenants/{tenant_id}/website/pages",
+          "score": 3,
+          "source": "rmr_platform/routes/website.py",
+          "label": "Website"
+        },
+        {
+          "route": "/api/tenants/{tenant_id}/website/sections",
+          "score": 3,
+          "source": "rmr_platform/routes/website.py",
+          "label": "Website"
+        },
+        {
+          "route": "/api",
+          "score": 0,
+          "source": "rmr_platform/routes/portfolio.py",
+          "label": "Website"
+        },
+        {
+          "route": "/static",
+          "score": 0,
+          "source": "rmr_platform/main.py",
+          "label": "Website"
+        }
+      ],
+      "preferred": "/api/website/sections/"
+    },
+    "crm": {
+      "aliases": [
+        "CRM Workspace",
+        "CRM"
+      ],
+      "candidates": [
+        {
+          "route": "/tenants/{tenant_id}/crm/summary",
+          "score": 8,
+          "source": "rmr_platform/routes/crm.py",
+          "label": "CRM"
+        },
+        {
+          "route": "/piq/{opportunity_id}/move-to-crm",
+          "score": 8,
+          "source": "rmr_platform/routes/piq.py",
+          "label": "CRM"
+        },
+        {
+          "route": "/api/crm",
+          "score": 5,
+          "source": "rmr_platform/commercial/middleware.py",
+          "label": "CRM"
+        },
+        {
+          "route": "/api",
+          "score": 0,
+          "source": "rmr_platform/routes/crm.py",
+          "label": "CRM"
+        },
+        {
+          "route": "/static",
+          "score": 0,
+          "source": "rmr_platform/main.py",
+          "label": "CRM"
+        },
+        {
+          "route": "/events",
+          "score": 0,
+          "source": "rmr_platform/commercial/router.py",
+          "label": "CRM"
+        },
+        {
+          "route": "/messages",
+          "score": 0,
+          "source": "templates/cb1_commercial.html",
+          "label": "CRM"
+        },
+        {
+          "route": "/commercial",
+          "score": 0,
+          "source": "public/cb1_enhancements.js",
+          "label": "CRM Workspace"
+        }
+      ],
+      "preferred": "/tenants/{tenant_id}/crm/summary"
+    },
+    "piq": {
+      "aliases": [
+        "ProspectIQ",
+        "PIQ"
+      ],
+      "candidates": [
+        {
+          "route": "/tenants/{tenant_id}/piq",
+          "score": 8,
+          "source": "rmr_platform/routes/piq.py",
+          "label": "PIQ"
+        },
+        {
+          "route": "/piq/{opportunity_id}/enhance",
+          "score": 8,
+          "source": "rmr_platform/routes/piq.py",
+          "label": "PIQ"
+        },
+        {
+          "route": "/piq/{opportunity_id}/move-to-crm",
+          "score": 8,
+          "source": "rmr_platform/routes/piq.py",
+          "label": "PIQ"
+        },
+        {
+          "route": "/api",
+          "score": 0,
+          "source": "rmr_platform/routes/piq.py",
+          "label": "ProspectIQ"
+        },
+        {
+          "route": "/static",
+          "score": 0,
+          "source": "rmr_platform/main.py",
+          "label": "PIQ"
+        },
+        {
+          "route": "/events",
+          "score": 0,
+          "source": "rmr_platform/commercial/router.py",
+          "label": "PIQ"
+        },
+        {
+          "route": "/messages",
+          "score": 0,
+          "source": "templates/cb1_commercial.html",
+          "label": "PIQ"
+        },
+        {
+          "route": "/messages/generate",
+          "score": 0,
+          "source": "templates/cb1_commercial.html",
+          "label": "PIQ"
+        }
+      ],
+      "preferred": "/tenants/{tenant_id}/piq"
+    },
+    "campaigns": {
+      "aliases": [
+        "Campaigns & Content",
+        "Campaigns",
+        "Content"
+      ],
+      "candidates": [
+        {
+          "route": "/campaigns",
+          "score": 10,
+          "source": "rmr_platform/commercial/router.py",
+          "label": "Campaigns"
+        },
+        {
+          "route": "/campaigns/{campaign_id}",
+          "score": 8,
+          "source": "rmr_platform/routes/campaigns.py",
+          "label": "Campaigns"
+        },
+        {
+          "route": "/campaigns/{cid}/generate",
+          "score": 8,
+          "source": "rmr_platform/commercial/router.py",
+          "label": "Campaigns"
+        },
+        {
+          "route": "/tenants/{tenant_id}/campaigns",
+          "score": 8,
+          "source": "rmr_platform/routes/campaigns.py",
+          "label": "Campaigns"
+        },
+        {
+          "route": "/api/cb1/tenants/{tenant_id}/campaigns",
+          "score": 3,
+          "source": "rmr_platform/cb1_router.py",
+          "label": "Campaigns"
+        },
+        {
+          "route": "/api/cb1/campaigns/{campaign_id}/{action}",
+          "score": 3,
+          "source": "rmr_platform/cb1_router.py",
+          "label": "Campaigns"
+        },
+        {
+          "route": "/social-content",
+          "score": 2,
+          "source": "templates/cb1_commercial.html",
+          "label": "Content"
+        },
+        {
+          "route": "/me",
+          "score": 0,
+          "source": "templates/cb1_commercial.html",
+          "label": "Content"
+        }
+      ],
+      "preferred": "/campaigns"
+    },
+    "email": {
+      "aliases": [
+        "Email & Activities",
+        "Activities",
+        "Connected Email"
+      ],
+      "candidates": [
+        {
+          "route": "/tenant",
+          "score": 0,
+          "source": "rmr_platform/routes/crm.py",
+          "label": "Activities"
+        },
+        {
+          "route": "/tenants/{tenant_id}/activities",
+          "score": 0,
+          "source": "rmr_platform/routes/crm.py",
+          "label": "Activities"
+        },
+        {
+          "route": "/accounts/{account_id}/360",
+          "score": -2,
+          "source": "rmr_platform/routes/crm.py",
+          "label": "Activities"
+        },
+        {
+          "route": "/tenants/{tenant_id}/contacts",
+          "score": -2,
+          "source": "rmr_platform/routes/crm.py",
+          "label": "Activities"
+        },
+        {
+          "route": "/api/cb1",
+          "score": -5,
+          "source": "templates/cb1_commercial.html",
+          "label": "Connected Email"
+        }
+      ],
+      "preferred": "/tenant"
+    },
+    "reporting": {
+      "aliases": [
+        "Management Intelligence",
+        "Reporting",
+        "Reports",
+        "Forecasting"
+      ],
+      "candidates": [
+        {
+          "route": "/tenants/{tenant_id}/reports/ttm",
+          "score": 0,
+          "source": "rmr_platform/routes/forecast.py",
+          "label": "Reports"
+        },
+        {
+          "route": "/tenants/{tenant_id}/success",
+          "score": -2,
+          "source": "rmr_platform/routes/portfolio.py",
+          "label": "Forecasting"
+        },
+        {
+          "route": "/api/setup/status",
+          "score": -5,
+          "source": "public/app.js",
+          "label": "Reports"
+        }
+      ],
+      "preferred": "/tenants/{tenant_id}/reports/ttm"
+    },
+    "training": {
+      "aliases": [
+        "Training Library",
+        "Training"
+      ],
+      "candidates": [
+        {
+          "route": "/training",
+          "score": 10,
+          "source": "rmr_platform/routes/training.py",
+          "label": "Training"
+        },
+        {
+          "route": "/training/{resource_id}/progress",
+          "score": 8,
+          "source": "rmr_platform/routes/training.py",
+          "label": "Training"
+        },
+        {
+          "route": "/api/training",
+          "score": 5,
+          "source": "public/pages/client.js",
+          "label": "Training Library"
+        },
+        {
+          "route": "/api/training/files/{filename}",
+          "score": 3,
+          "source": "rmr_platform/main.py",
+          "label": "Training"
+        },
+        {
+          "route": "/api",
+          "score": 0,
+          "source": "rmr_platform/routes/training.py",
+          "label": "Training"
+        },
+        {
+          "route": "/static",
+          "score": 0,
+          "source": "rmr_platform/main.py",
+          "label": "Training"
+        },
+        {
+          "route": "/{path:path}",
+          "score": -2,
+          "source": "rmr_platform/main.py",
+          "label": "Training"
+        },
+        {
+          "route": "/tenants/{tenant_id}/success",
+          "score": -2,
+          "source": "rmr_platform/routes/portfolio.py",
+          "label": "Training"
+        }
+      ],
+      "preferred": "/training"
+    },
+    "team": {
+      "aliases": [
+        "Sales Organization",
+        "Team",
+        "Settings"
+      ],
+      "candidates": [
+        {
+          "route": "/api",
+          "score": 0,
+          "source": "rmr_platform/routes/training.py",
+          "label": "Settings"
+        },
+        {
+          "route": "/audit",
+          "score": 0,
+          "source": "rmr_platform/routes/system.py",
+          "label": "Settings"
+        },
+        {
+          "route": "/login",
+          "score": 0,
+          "source": "rmr_platform/routes/auth.py",
+          "label": "Settings"
+        },
+        {
+          "route": "/static",
+          "score": 0,
+          "source": "rmr_platform/main.py",
+          "label": "Settings"
+        },
+        {
+          "route": "/status",
+          "score": 0,
+          "source": "rmr_platform/routes/setup.py",
+          "label": "Team"
+        },
+        {
+          "route": "/health",
+          "score": 0,
+          "source": "rmr_platform/routes/system.py",
+          "label": "Settings"
+        },
+        {
+          "route": "/complete",
+          "score": 0,
+          "source": "rmr_platform/routes/setup.py",
+          "label": "Settings"
+        },
+        {
+          "route": "/training",
+          "score": 0,
+          "source": "rmr_platform/routes/training.py",
+          "label": "Settings"
+        }
+      ],
+      "preferred": "/api"
+    },
+    "portfolio": {
+      "aliases": [
+        "Portfolio Command Center",
+        "Return to Portfolio"
+      ],
+      "candidates": [
+        {
+          "route": "/api/portfolio/summary",
+          "score": 5,
+          "source": "public/pages/admin.js",
+          "label": "Portfolio Command Center"
+        },
+        {
+          "route": "/commercial#custody",
+          "score": 2,
+          "source": "public/cb1_enhancements.js",
+          "label": "Return to Portfolio"
+        },
+        {
+          "route": "/commercial#access",
+          "score": 0,
+          "source": "public/cb1_enhancements.js",
+          "label": "Return to Portfolio"
+        },
+        {
+          "route": "/cb1/assets/cb1.css?v=5.2.1-client-admin-correction-po1",
+          "score": 0,
+          "source": "templates/cb1_commercial.html",
+          "label": "Return to Portfolio"
+        },
+        {
+          "route": "/api/cb1",
+          "score": -5,
+          "source": "templates/cb1_commercial.html",
+          "label": "Return to Portfolio"
+        },
+        {
+          "route": "/api/cb1/business-health",
+          "score": -5,
+          "source": "public/cb1_enhancements.js",
+          "label": "Return to Portfolio"
+        }
+      ],
+      "preferred": "/api/portfolio/summary"
+    },
+    "client_access": {
+      "aliases": [
+        "Manage Client Access",
+        "Client Access"
+      ],
+      "candidates": [
+        {
+          "route": "/commercial#access",
+          "score": 2,
+          "source": "public/cb1_enhancements.js",
+          "label": "Manage Client Access"
+        },
+        {
+          "route": "/readiness",
+          "score": 0,
+          "source": "public/cb1_enhancements.js",
+          "label": "Client Access"
+        },
+        {
+          "route": "/commercial",
+          "score": 0,
+          "source": "public/cb1_enhancements.js",
+          "label": "Manage Client Access"
+        },
+        {
+          "route": "/demo-users",
+          "score": 0,
+          "source": "rmr_platform/routes/auth.py",
+          "label": "Client Access"
+        },
+        {
+          "route": "/onboarding",
+          "score": 0,
+          "source": "rmr_platform/routes/onboarding.py",
+          "label": "Client Access"
+        },
+        {
+          "route": "/custody/active",
+          "score": 0,
+          "source": "public/cb1_enhancements.js",
+          "label": "Client Access"
+        },
+        {
+          "route": "/commercial#custody",
+          "score": 0,
+          "source": "public/cb1_enhancements.js",
+          "label": "Manage Client Access"
+        },
+        {
+          "route": "/invitations/accept",
+          "score": 0,
+          "source": "rmr_platform/routes/auth.py",
+          "label": "Client Access"
+        }
+      ],
+      "preferred": "/commercial#access"
+    }
+  }
+}

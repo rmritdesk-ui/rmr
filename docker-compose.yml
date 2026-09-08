@@ -1,0 +1,36 @@
+services:
+  app:
+    image: ${RMR_IMAGE_REPOSITORY:-rmr-platform}:${RMR_APP_VERSION:-5.4.1.2-interaction-regression-correction-po1}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: "${RMR_CONTAINER_UID:-10001}:${RMR_CONTAINER_GID:-10001}"
+    env_file:
+      - .env
+    environment:
+      RMR_DATABASE_URL: ${RMR_DATABASE_URL:-}
+      RMR_CREDENTIAL_ENCRYPTION_KEY: ${RMR_CREDENTIAL_ENCRYPTION_KEY:-local-pilot-change-me}
+      RMR_APP_VERSION: 5.4.1.2-interaction-regression-correction-po1
+      RMR_COMMERCIAL_VERSION: ${RMR_COMMERCIAL_VERSION:-5.4.1.2-interaction-regression-correction-po1}
+      RMR_PROVIDER_MODE: ${RMR_PROVIDER_MODE:-mock}
+      RMR_INTEGRATION_ENCRYPTION_KEY: ${RMR_INTEGRATION_ENCRYPTION_KEY:-}
+      RMR_MICROSOFT_CLIENT_ID: ${RMR_MICROSOFT_CLIENT_ID:-}
+      RMR_MICROSOFT_CLIENT_SECRET: ${RMR_MICROSOFT_CLIENT_SECRET:-}
+      RMR_GOOGLE_CLIENT_ID: ${RMR_GOOGLE_CLIENT_ID:-}
+      RMR_GOOGLE_CLIENT_SECRET: ${RMR_GOOGLE_CLIENT_SECRET:-}
+      RMR_AI_MODE: ${RMR_AI_MODE:-safe-template}
+      RMR_AI_API_KEY: ${RMR_AI_API_KEY:-}
+      RMR_HOST: 0.0.0.0
+      RMR_PORT: 8000
+      RMR_DATA_DIR: /data
+    ports:
+      - "${RMR_PUBLIC_PORT:-8080}:8000"
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=5)); raise SystemExit(0 if d.get('status')=='healthy' else 1)"]
+      interval: 10s
+      timeout: 8s
+      start_period: 20s
+      retries: 12

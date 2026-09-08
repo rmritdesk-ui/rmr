@@ -1,0 +1,16 @@
+{
+  "source": "sanitized reproduction of first real RC2 Windows Docker Desktop preflight",
+  "expected_env_version": "5.0.0-rc1",
+  "reported_host_version": "5.0.0-rc.1",
+  "reported_internal_version": "5.0.0-rc.1",
+  "container_running": true,
+  "container_restarting": false,
+  "docker_health": "healthy",
+  "restart_count": 0,
+  "host_status_code": 200,
+  "host_status": "healthy",
+  "internal_status": "healthy",
+  "rc2_result": "incorrectly rejected by literal version comparison",
+  "rc3_expected_result": "accepted as the known v5.0 metadata alias pair",
+  "scope_rule": "No other punctuation or prerelease-label variants are normalized."
+}

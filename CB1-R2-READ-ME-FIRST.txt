@@ -1,0 +1,10 @@
+HISTORICAL BASELINE NOTICE
+
+This file name is retained because CB1-R2 is the frozen accepted source baseline used to create RMR Global v5.2.
+
+Do not use the old CB1-R2 upgrade workflow to start this Product Owner candidate.
+
+For the current application, read README-FIRST.txt and double-click:
+START-PRODUCT-OWNER-TEST.bat
+
+The v5.2 Product Owner environment is isolated on port 8081 and does not overwrite the accepted CB1-R2 installation or CAF pilot data.

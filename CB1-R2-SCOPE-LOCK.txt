@@ -1,0 +1,25 @@
+CB1-R2 FROZEN CORRECTION SCOPE
+
+ALLOWED FUNCTIONAL CHANGE
+- scripts\RmrDeployment.psm1: in Invoke-RmrCapturedMigration only, replace the
+  PowerShell-native invocation that could misclassify successful native stderr with
+  Start-Process, preserve separate stdout/stderr capture, and use Process.ExitCode.
+
+ALLOWED SUPPORTING CHANGES
+- Revision-2 release identity and container/evidence labels.
+- R2-specific root-cause, test, integrity, upgrade and rollback documentation.
+- R2-specific QA gates, generated evidence, manifest and checksum.
+
+PROHIBITED CHANGES
+- No RMR application workflow or feature changes.
+- No database schema or migration-content changes.
+- No CAF data transformations.
+- No changes to the successful rollback architecture.
+- No production activity.
+- No Hasan handoff.
+- No overwrite of the current candidate, CB1, or CB1-R1.
+
+ACCEPTANCE BOUNDARY
+The package is a Windows/Docker Product Owner test candidate only. It is not accepted
+or frozen until the exact packaged artifact passes the local upgrade, data-preservation,
+health/version, automated QC and controlled rollback gates.
