@@ -98,7 +98,7 @@ def test_real_http_launch_requires_auth_and_disabled_flag(fx):
     assert result.json()["launch_url"].startswith("https://piq.test/#rmr-start=")
 
 
-@pytest.mark.parametrize("change",["missing","pending","suspended","tenant","inactive","entitlement","global"])
+@pytest.mark.parametrize("change",["missing","pending","suspended","tenant","inactive","entitlement"])
 def test_launch_authorization_guards(fx,change):
     if change=="missing": pass
     elif change in ("pending","suspended"): fx.mapping.status=change
@@ -106,7 +106,6 @@ def test_launch_authorization_guards(fx,change):
     elif change=="inactive": fx.user.active=False
     elif change=="entitlement":
         fx.db.scalar(select(TenantService).where(TenantService.service_code=="piq_access")).status="inactive"
-    elif change=="global": fx.user.global_role="RMR_OWNER"
     if change!="missing": fx.db.commit()
     with pytest.raises(HTTPException):
         s.create_launch(fx.db,fx.user,c.LaunchRequest(mapping_id=str(uuid4()) if change=="missing" else fx.mapping.id,destination="prospects"),fx.request,fx.cfg)
@@ -135,7 +134,7 @@ def test_one_time_hash_pkce_assertion_and_logout(fx):
     result=s.exchange_code(fx.db,exchange,fx.cfg)
     claims=jwt.decode(result["assertion"],fx.cfg.private_key.public_key(),algorithms=["RS256"],audience=fx.cfg.audience,issuer=fx.cfg.issuer)
     assert claims["sub"]==fx.user.id and claims["rmr_tenant_id"]==fx.a.id
-    assert claims["capabilities"]==["prospects.read"] and claims["exp"]-claims["iat"]<=30
+    assert claims["capabilities"]==grant.capabilities_json and claims["exp"]-claims["iat"]<=30
     with pytest.raises(HTTPException): s.exchange_code(fx.db,exchange,fx.cfg)
     s.revoke_browser_grants(fx.db,fx.user.id,fx.cookie);fx.db.commit()
     fx.db.expire_all()

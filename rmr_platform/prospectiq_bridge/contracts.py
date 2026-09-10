@@ -15,7 +15,8 @@ WebUrl = Annotated[str, StringConstraints(pattern=r"^https?://[^\s/]+(?:/[^\s]*)
 Positive = Annotated[int, Field(strict=True, ge=1)]
 Score = Annotated[int, Field(strict=True, ge=0, le=100)]
 Capability = Literal["prospects.read", "profiles.manage_own", "profiles.manage_workspace",
-                     "discovery.run", "research.run", "crm.transfer"]
+                     "discovery.run", "research.run", "crm.transfer", "profiles.create",
+                     "profiles.update_own", "research.confirm_cost", "prospects.export"]
 Destination = Literal["prospects", "target_profiles"]
 
 
@@ -75,7 +76,7 @@ class GrantContext(Contract):
     mapping_version: Positive
     piq_client_id: UUID
     integration_instance_id: Text120
-    capabilities: list[Capability] = Field(max_length=6)
+    capabilities: list[Capability] = Field(max_length=10)
     absolute_expires_at: Positive
     rmr_tenant_id: UUID
     authorization_checked_at: Positive

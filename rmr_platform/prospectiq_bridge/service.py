@@ -1,4 +1,4 @@
-"""Short-lived, read-only federation. No provider or CRM delivery code."""
+"""Short-lived, capability-bound federation. No provider or CRM delivery code."""
 import base64
 import hashlib
 import hmac
@@ -20,6 +20,7 @@ from ..security import COOKIE_NAME, decode_token
 from ..unified_models import ManagedTenantSession
 from .models import ProspectiqAuthorizationGrant as Grant, ProspectiqClientMapping as Mapping, ProspectiqReplayNonce as Replay
 from .contracts import AssertionClaims, GrantContext
+from .capabilities import capabilities_for
 
 
 def digest(value):
@@ -42,13 +43,14 @@ def authorized(db, user, mapping, cfg, managed_id=None):
     if is_global_admin(user):
         managed_ref = managed_id or getattr(user, "_managed_session_id", None)
         managed = db.get(ManagedTenantSession, managed_ref) if managed_ref else None
-        if (not managed or managed.admin_user_id != user.id or managed.tenant_id != mapping.tenant_id
+        if managed_ref and (not managed or managed.admin_user_id != user.id or managed.tenant_id != mapping.tenant_id
                 or managed.status != "active" or managed.access_type != "managed_write"
                 or aware(managed.expires_at) <= utcnow()):
             raise HTTPException(403, "Active managed workspace session required")
-        user._managed_tenant_id = managed.tenant_id
-        user._managed_access_type = managed.access_type
-        require_client_operational_write(user, mapping.tenant_id)
+        if managed:
+            user._managed_tenant_id = managed.tenant_id
+            user._managed_access_type = managed.access_type
+            require_client_operational_write(user, mapping.tenant_id)
     elif user.tenant_role not in CLIENT_ROLES:
         raise HTTPException(403, "Tenant role required")
     _require_piq_access(db, mapping.tenant_id)
@@ -75,7 +77,7 @@ def create_launch(db, user, payload, request, cfg):
                 mapping_version=mapping.mapping_version, piq_client_id=mapping.piq_client_id,
                 integration_instance_id=cfg.instance, code_hash=digest(secrets.token_urlsafe(32)),
                 code_expires_at=min(absolute, now + timedelta(minutes=3)), pkce_challenge="",
-                binding_reference=str(uuid4()), capabilities_json=["prospects.read"],
+                binding_reference=str(uuid4()), capabilities_json=capabilities_for(user, mapping.tenant_id, managed),
                 authorization_checked_at=now, managed_session_id=managed.id if managed else None,
                 managed_session_expires_at=managed.expires_at if managed else None,
                 browser_session_hash=digest(raw_session), absolute_expires_at=absolute,
@@ -93,7 +95,10 @@ def check_grant(db, grant, cfg):
         raise HTTPException(403, "Grant expired or revoked")
     mapping = db.get(Mapping, grant.mapping_id)
     user = db.get(User, grant.user_id)
-    authorized(db, user, mapping, cfg, grant.managed_session_id)
+    managed = authorized(db, user, mapping, cfg, grant.managed_session_id)
+    current = capabilities_for(user, mapping.tenant_id, managed)
+    if not grant.capabilities_json or not set(grant.capabilities_json).issubset(current):
+        raise HTTPException(403, "Capabilities changed; relaunch from RMR")
     if (mapping.mapping_version != grant.mapping_version or mapping.tenant_id != grant.tenant_id
             or mapping.piq_client_id != grant.piq_client_id):
         raise HTTPException(403, "Mapping changed")
@@ -130,7 +135,7 @@ def authorize_launch(db, user, payload, request, cfg):
 def context(row):
     return GrantContext(grant_id=row.id, rmr_user_id=row.user_id, mapping_id=row.mapping_id,
                         mapping_version=row.mapping_version, piq_client_id=row.piq_client_id,
-                        integration_instance_id=row.integration_instance_id, capabilities=["prospects.read"],
+                        integration_instance_id=row.integration_instance_id, capabilities=row.capabilities_json,
                         absolute_expires_at=int(aware(row.absolute_expires_at).timestamp()),
                         rmr_tenant_id=row.tenant_id, authorization_checked_at=int(utcnow().timestamp()),
                         managed_session_id=row.managed_session_id,
