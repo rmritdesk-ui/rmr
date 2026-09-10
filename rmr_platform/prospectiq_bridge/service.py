@@ -2,6 +2,8 @@
 import base64
 import hashlib
 import hmac
+import json
+import logging
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
@@ -69,7 +71,7 @@ def create_launch(db, user, payload, request, cfg):
     raw_session = request.cookies.get(COOKIE_NAME, "")
     session_expiry = datetime.fromtimestamp(decode_token(raw_session)["exp"], timezone.utc)
     now = utcnow()
-    absolute = min(session_expiry, now + timedelta(minutes=5),
+    absolute = min(session_expiry, now + timedelta(seconds=cfg.grant_ttl),
                    aware(managed.expires_at) if managed else session_expiry)
     if absolute <= now:
         raise HTTPException(403, "Session expired")
@@ -89,6 +91,8 @@ def create_launch(db, user, payload, request, cfg):
 
 
 def check_grant(db, grant, cfg):
+    if grant:
+        db.refresh(grant, with_for_update=True)
     if (not grant or grant.revoked_at or grant.status not in ("pending", "consumed")
             or not grant.absolute_expires_at or aware(grant.absolute_expires_at) <= utcnow()
             or grant.integration_instance_id != cfg.instance):
@@ -97,11 +101,15 @@ def check_grant(db, grant, cfg):
     user = db.get(User, grant.user_id)
     managed = authorized(db, user, mapping, cfg, grant.managed_session_id)
     current = capabilities_for(user, mapping.tenant_id, managed)
-    if not grant.capabilities_json or not set(grant.capabilities_json).issubset(current):
-        raise HTTPException(403, "Capabilities changed; relaunch from RMR")
+    effective = [cap for cap in grant.capabilities_json if cap in current]
+    if "prospects.read" not in effective:
+        raise HTTPException(403, "Grant has no current read authority")
     if (mapping.mapping_version != grant.mapping_version or mapping.tenant_id != grant.tenant_id
             or mapping.piq_client_id != grant.piq_client_id):
         raise HTTPException(403, "Mapping changed")
+    if effective != grant.capabilities_json:
+        grant.capabilities_json = effective
+        db.flush()
     return user
 
 
@@ -177,20 +185,23 @@ def exchange_code(db, payload, cfg):
 
 def authenticate_service(db, headers, body, method, path, cfg):
     stamp, nonce = headers.get("X-Bridge-Timestamp", ""), headers.get("X-Bridge-Nonce", "")
+    key_id = headers.get("X-Bridge-Key", "")
+    keys = cfg.hmac_keys or {cfg.hmac_key_id: cfg.hmac_secret}
     try:
         timestamp = int(stamp)
         if (str(timestamp) != stamp or abs(time.time() - timestamp) > 30 or len(nonce) != 64
                 or any(c not in "0123456789abcdef" for c in nonce)
                 or headers.get("X-Bridge-Instance") != cfg.instance
-                or headers.get("X-Bridge-Key") != cfg.hmac_key_id):
+                or key_id not in keys):
             raise ValueError()
-        canonical = "\n".join([cfg.instance, cfg.hmac_key_id, method, path, stamp, nonce, hashlib.sha256(body).hexdigest()])
-        expected = hmac.new(cfg.hmac_secret.encode(), canonical.encode(), hashlib.sha256).hexdigest()
+        canonical = "\n".join([cfg.instance, key_id, method, path, stamp, nonce, hashlib.sha256(body).hexdigest()])
+        expected = hmac.new(keys[key_id].encode(), canonical.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, headers.get("X-Bridge-Signature", "")):
             raise ValueError()
     except (ValueError, TypeError):
         raise HTTPException(401, "Invalid partner authentication") from None
-    db.add(Replay(integration_instance_id=cfg.instance, service_identity="piq", key_id=cfg.hmac_key_id,
+    db.info["bridge_key_id"] = key_id
+    db.add(Replay(integration_instance_id=cfg.instance, service_identity="piq", key_id=key_id,
                   nonce_hash=digest(nonce), request_timestamp=datetime.fromtimestamp(timestamp, timezone.utc),
                   expires_at=utcnow() + timedelta(minutes=2)))
     try:
@@ -198,6 +209,8 @@ def authenticate_service(db, headers, body, method, path, cfg):
     except IntegrityError:
         db.rollback()
         raise HTTPException(409, "Partner request replayed") from None
+    logging.getLogger("rmr.bridge").info(json.dumps({"event":"prospectiq_partner_authenticated",
+        "instance":cfg.instance,"key_id":key_id,"operation":path}))
 
 
 def revoke_browser_grants(db, user_id, cookie):

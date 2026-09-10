@@ -31,6 +31,8 @@ PUBLIC_DIR = BASE_DIR / "public"
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from .prospectiq_bridge.operations import validate_startup
+    validate_startup()
     if settings.auto_migrate:
         migrate()
     else:

@@ -36,8 +36,10 @@ with sync_playwright() as p:
             page.get_by_role("button",name="Lead Pipeline",exact=True).click()
             selector=page.locator("select").filter(has=page.locator("option",has_text="Profile A"))
             if selector.count():selector.first.select_option(f["profileA"])
-            expect(page.get_by_role("button",name="View lead",exact=True).first).to_be_visible(timeout=30000)
-            page.get_by_role("button",name="View lead",exact=True).first.click()
+            # Other workflow proofs may have added leads; select the intended synthetic row.
+            target=page.locator("tr").filter(has_text="Synthetic Lead A").get_by_role("button",name="View lead",exact=True)
+            expect(target).to_be_visible(timeout=30000)
+            target.click()
             expect(page.get_by_role("heading",name="Synthetic Lead A",exact=True)).to_be_visible(timeout=30000)
             if role=="CLIENT_ADMIN":
                 existing=context.request.get(endpoint+"/"+f["publicA"],headers=headers).json()
@@ -93,7 +95,8 @@ with sync_playwright() as p:
     result=native.request.post("https://piq.test/api/integrations/crm/push",
         headers={"Authorization":"Bearer "+login["accessToken"]},data={"leadId":f["leadB"]})
     assert result.status==200,result.text()
-    assert json.loads((ROOT/"native-crm-result.json").read_text())["received"]
+    provider_root=ROOT/"piq" if (ROOT/"piq").is_dir() else ROOT
+    assert json.loads((provider_root/"native-crm-result.json").read_text())["received"]
     results["native_login_and_generic_crm"]="PASS"
     native.close();browser.close()
 results.update(result="PASS",real_google_calls=0,real_openai_calls=0,automatic_crm_conversion=False)

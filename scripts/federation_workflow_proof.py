@@ -64,9 +64,9 @@ http {
 """)
 
 
-def run_rmr():
+def run_rmr(database_url=None, seed=True):
     f=json.loads((ROOT/"fixture.json").read_text())
-    os.environ.update(RMR_DATA_DIR="/tmp/federation-rmr",RMR_DATABASE_URL="sqlite:////tmp/federation-rmr/app.db",
+    os.environ.update(RMR_DATA_DIR="/tmp/federation-rmr",RMR_DATABASE_URL=database_url or "sqlite:////tmp/federation-rmr/app.db",
        RMR_SECRET_KEY=f["rmr_secret"],RMR_BASE_URL="https://rmr.test",RMR_COOKIE_SECURE="true",
        RMR_AUTO_MIGRATE="false",RMR_AUTO_SEED="false",RMR_ALLOW_DEMO_CREDENTIALS="false",RMR_INSTALL_PROFILE="empty",
        RMR_LOCAL_RECOVERY_MODE="false",RMR_PIQ_WORKER_ENABLED="false",RMR_CB1_WORKER_ENABLED="false",
@@ -82,17 +82,18 @@ def run_rmr():
     from rmr_platform.security import hash_password
     from rmr_platform.prospectiq_bridge.models import ProspectiqClientMapping
     migrate()
-    with db_session() as db:
-        db.add(User(full_name="Synthetic installation owner",email="proof-owner@example.invalid",
-                    global_role="RMR_OWNER",password_hash="not-a-login-hash"))
-        db.add(Tenant(id=f["tenant"],name="Federation Tenant A",slug="federation-proof"));db.flush()
-        for role,actor in f["actors"].items():
-            db.add(User(id=actor["rmr"],tenant_id=f["tenant"],tenant_role=role,full_name="Phase 2 "+role,
-                        email=actor["email"],password_hash=hash_password(f["password"])))
-        for code in ["piq_access","piq_enhancement"]:
-            db.add(TenantService(tenant_id=f["tenant"],service_code=code,status="active"))
-        db.add(ProspectiqClientMapping(id=f["mapping"],tenant_id=f["tenant"],piq_client_id=f["clientA"],
-                                      integration_instance_id="proof-piq",status="active"))
+    if seed:
+        with db_session() as db:
+            db.add(User(full_name="Synthetic installation owner",email="proof-owner@example.invalid",
+                        global_role="RMR_OWNER",password_hash="not-a-login-hash"))
+            db.add(Tenant(id=f["tenant"],name="Federation Tenant A",slug="federation-proof"));db.flush()
+            for role,actor in f["actors"].items():
+                db.add(User(id=actor["rmr"],tenant_id=f["tenant"],tenant_role=role,full_name="Phase 2 "+role,
+                            email=actor["email"],password_hash=hash_password(f["password"])))
+            for code in ["piq_access","piq_enhancement"]:
+                db.add(TenantService(tenant_id=f["tenant"],service_code=code,status="active"))
+            db.add(ProspectiqClientMapping(id=f["mapping"],tenant_id=f["tenant"],piq_client_id=f["clientA"],
+                                          integration_instance_id="proof-piq",status="active"))
     import uvicorn
     uvicorn.run("rmr_platform.main:app",host="0.0.0.0",port=8000,access_log=False,log_level="warning")
 

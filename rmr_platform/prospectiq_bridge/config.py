@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from fastapi import HTTPException
 
 from ..config import settings
+from .keys import verification_keys
 
 
 def origin(value):
@@ -32,6 +33,8 @@ class BridgeConfig:
     hmac_key_id: str
     hmac_secret: str = field(repr=False)
     code_ttl: int
+    grant_ttl: int = 28800
+    hmac_keys: dict = field(default_factory=dict, repr=False)
 
 
 def bridge_config():
@@ -56,8 +59,13 @@ def bridge_config():
             Path(os.environ["RMR_PROSPECTIQ_SIGNING_PRIVATE_KEY_FILE"]).read_bytes(), password=None)
         if not isinstance(key, RSAPrivateKey) or key.key_size < 2048:
             raise ValueError("RSA signing key required")
+        ttl = int(os.getenv("RMR_PROSPECTIQ_GRANT_MAX_SECONDS", "28800"))
+        if not 1800 <= ttl <= 28800 or settings.prospectiq_assertion_issuer != rmr:
+            raise ValueError("Bounded grant and exact issuer required")
+        keys = verification_keys(os.getenv("RMR_PROSPECTIQ_HMAC_KEYS_JSON", "{}"),
+                                 {hmac_id: secret}, (settings.secret_key,))
         return BridgeConfig(rmr, piq, callback, settings.prospectiq_integration_instance_id,
                             settings.prospectiq_assertion_issuer, settings.prospectiq_assertion_audience,
-                            key_id, key, hmac_id, secret, settings.prospectiq_authorization_code_ttl_seconds)
+                            key_id, key, hmac_id, secret, settings.prospectiq_authorization_code_ttl_seconds, ttl, keys)
     except (ValueError, KeyError, OSError):
         raise HTTPException(503, "ProspectIQ bridge configuration unavailable") from None

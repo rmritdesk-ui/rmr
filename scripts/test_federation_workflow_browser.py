@@ -5,9 +5,10 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright, expect
 ROOT=Path("/proof")
+PROVIDER=ROOT/"piq" if (ROOT/"piq").is_dir() else ROOT
 f=json.loads((ROOT/"fixture.json").read_text())
 results={}
-initial_count=json.loads((ROOT/"mock-discovery-count.json").read_text())["calls"] if (ROOT/"mock-discovery-count.json").exists() else 0
+initial_count=json.loads((PROVIDER/"mock-discovery-count.json").read_text())["calls"] if (PROVIDER/"mock-discovery-count.json").exists() else 0
 with sync_playwright() as p:
     browser=p.chromium.launch(headless=True)
     for role in ["CLIENT_ADMIN","SALES_REP","EXECUTIVE_VIEWER"]:
@@ -165,7 +166,7 @@ with sync_playwright() as p:
     finally:
         native.close()
         browser.close()
-count=json.loads((ROOT/"mock-discovery-count.json").read_text())["calls"]
+count=json.loads((PROVIDER/"mock-discovery-count.json").read_text())["calls"]
 assert count-initial_count==2
 results.update(result="PASS",mock_discovery_requests=count-initial_count,real_google_calls=0,real_openai_calls=0,crm_handoffs=0)
 (ROOT/"phase2-browser-result.json").write_text(json.dumps(results,indent=2))

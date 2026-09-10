@@ -20,6 +20,7 @@ from ..models import Lead, User, utcnow
 from ..permissions import require_client_operational_write
 from ..services import audit
 from .config import bridge_config
+from .keys import verification_keys
 from .models import (
     ProspectiqClientMapping as Mapping, ProspectiqAuthorizationGrant as Grant,
     ProspectiqCrmReceipt as Receipt, ProspectiqCrmEvent as Event,
@@ -41,14 +42,8 @@ class CrmConfig:
 def crm_config():
     cfg = bridge_config()  # Existing disabled flag and registered instance/origins.
     try:
-        keys = json.loads(os.getenv("RMR_PROSPECTIQ_CRM_KEYS_JSON", "{}"))
-        if not isinstance(keys, dict) or not 1 <= len(keys) <= 4:
-            raise ValueError()
-        for key, secret in keys.items():
-            if (not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", key)
-                    or not isinstance(secret, str) or not 32 <= len(secret) <= 512
-                    or "\n" in secret or secret in {settings.secret_key, cfg.hmac_secret}):
-                raise ValueError()
+        keys = verification_keys(os.getenv("RMR_PROSPECTIQ_CRM_KEYS_JSON", "{}"),
+                                 forbidden=(settings.secret_key, *(cfg.hmac_keys or {cfg.hmac_key_id: cfg.hmac_secret}).values()))
         return CrmConfig(cfg, keys)
     except (ValueError, TypeError):
         raise HTTPException(503, {"code": "crm_configuration_unavailable"}) from None
@@ -65,7 +60,8 @@ def authenticate(db, headers, body, method, path, cfg):
     key = headers.get("X-Bridge-Key", "")
     try:
         timestamp = int(stamp)
-        if (method != "POST" or path != PATH or len(body) > MAX_BODY
+        lookup = method == "GET" and re.fullmatch(r"/api/integrations/prospectiq/v1/crm/handoffs/[a-fA-F0-9-]{36}", path.split("?")[0])
+        if (not ((method == "POST" and path == PATH) or lookup) or len(body) > MAX_BODY
                 or headers.get("X-Bridge-Service") != SERVICE
                 or headers.get("X-Bridge-Instance") != cfg.bridge.instance
                 or key not in cfg.keys or str(timestamp) != stamp
@@ -83,6 +79,7 @@ def authenticate(db, headers, body, method, path, cfg):
                   nonce_hash=service.digest(nonce),
                   request_timestamp=datetime.fromtimestamp(timestamp, timezone.utc),
                   expires_at=utcnow() + timedelta(minutes=2)))
+    db.info["bridge_key_id"] = key
     try:
         db.commit()
     except IntegrityError:
@@ -179,6 +176,7 @@ def receive(db, payload, cfg):
         audit(db, actor, "prospectiq.crm." + result, tenant_id=mapping.tenant_id,
               entity_type="lead", entity_id=lead.id, data={
                   "integration_service": "ProspectIQ", "integration_instance_id": bridge.instance,
+                  "service_key_id": db.info.get("bridge_key_id"),
                   "piq_client_id": mapping.piq_client_id, "mapping_id": mapping.id,
                   "mapping_version": mapping.mapping_version, "grant_id": grant.id,
                   "prospect_public_id": public_id, "integration_event_id": event_id,

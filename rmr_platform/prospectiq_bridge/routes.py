@@ -13,9 +13,36 @@ from .contracts import LaunchRequest, LaunchResponse, AuthorizeRequest, Authoriz
 from .models import ProspectiqClientMapping as Mapping, ProspectiqAuthorizationGrant as Grant
 from . import service
 from . import crm
-from .contracts import CrmLeadRequest, CrmLeadResponse
+from .contracts import CrmLeadRequest, CrmLeadResponse, ReceiptLookupRequest
 
 router = APIRouter(prefix="/api/integrations/prospectiq/v1", tags=["ProspectIQ federation"])
+
+
+@router.get("/health")
+def bridge_health(db: Session = Depends(get_db)):
+    from .operations import readiness
+    result=readiness(db)
+    return JSONResponse(result,status_code=503 if result["status"]=="not_ready" else 200)
+
+
+@router.get("/crm/handoffs/{external_id}")
+async def receipt_lookup(external_id: UUID, request: Request, db: Session = Depends(get_db), cfg=Depends(crm.crm_config)):
+    from .operations import lookup_receipt
+    path=request.url.path+("?" + request.url.query if request.url.query else "")
+    if len(path)>3000 or await request.body():
+        raise HTTPException(422,{"code":"crm_invalid_lookup"})
+    crm.authenticate(db,request.headers,b"",request.method,path,cfg)
+    try:
+        if len(request.query_params.multi_items())!=len(dict(request.query_params)):
+            raise ValueError()
+        data=dict(request.query_params)
+        if "mapping_version" in data:
+            data["mapping_version"]=int(data["mapping_version"])
+        payload=ReceiptLookupRequest.model_validate(data)
+    except (ValidationError,ValueError):
+        raise HTTPException(422,{"code":"crm_invalid_lookup"}) from None
+    result=lookup_receipt(db,external_id,payload,cfg)
+    return JSONResponse(result,headers={"Cache-Control":"no-store"})
 
 
 @router.post("/crm/leads", response_model=CrmLeadResponse)
@@ -68,11 +95,20 @@ async def exchange(payload: ExchangeRequest, request: Request, db: Session = Dep
 async def check(payload: GrantCheckRequest, request: Request, db: Session = Depends(get_db), cfg=Depends(bridge_config)):
     service.authenticate_service(db, request.headers, await request.body(), request.method, request.url.path, cfg)
     grant = db.get(Grant, str(payload.grant_id))
+    if (not grant or grant.mapping_version != payload.mapping_version
+            or payload.integration_instance_id != cfg.instance):
+        return {"active": False, "reason": "access_denied", "context": None}
     try:
         service.check_grant(db, grant, cfg)
         if (grant.status != "consumed" or grant.mapping_version != payload.mapping_version
                 or payload.integration_instance_id != cfg.instance):
             raise HTTPException(403, "Inactive grant")
-        return {"active": True, "reason": "active", "context": service.context(grant)}
+        result = {"active": True, "reason": "active", "context": service.context(grant)}
+        db.commit()
+        return result
     except HTTPException:
+        if grant and grant.status != "revoked":
+            grant.status = "revoked"
+            grant.revoked_at = service.utcnow()
+            db.commit()
         return {"active": False, "reason": "access_denied", "context": None}

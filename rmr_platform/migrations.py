@@ -27,7 +27,8 @@ PIQ_WORKFLOW_VERSION = "005.008.000-piq-profile-collection"
 PROSPECTIQ_BRIDGE_VERSION = "005.009.000-prospectiq-bridge-foundation"
 PROSPECTIQ_FEDERATION_VERSION = "005.010.000-prospectiq-federation"
 PROSPECTIQ_CRM_VERSION = "005.011.000-prospectiq-crm-handoff"
-MIGRATION_VERSION = PROSPECTIQ_CRM_VERSION
+PROSPECTIQ_OPERATIONS_VERSION = "005.012.000-prospectiq-operations"
+MIGRATION_VERSION = PROSPECTIQ_OPERATIONS_VERSION
 
 
 def _column_names(table_name: str, *, bind=engine) -> set[str]:
@@ -216,6 +217,12 @@ def _migration_005_010_000() -> None:
     apply_prospectiq_federation_schema(bind=engine)
 
 
+def apply_prospectiq_operations_schema(*, bind=engine):
+    with bind.begin() as connection:
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_bridge_grant_absolute ON prospectiq_authorization_grants (absolute_expires_at)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_bridge_browser_logout ON prospectiq_authorization_grants (user_id,browser_session_hash)"))
+
+
 MIGRATIONS: list[tuple[str, Callable[[], None]]] = [
     (FUNCTIONAL_EXPERIENCE_VERSION, _migration_005_001_000),
     (UNIFIED_PRODUCT_VERSION, _migration_005_003_000),
@@ -228,6 +235,7 @@ MIGRATIONS: list[tuple[str, Callable[[], None]]] = [
     (PROSPECTIQ_BRIDGE_VERSION, _migration_005_009_000),
     (PROSPECTIQ_FEDERATION_VERSION, _migration_005_010_000),
     (PROSPECTIQ_CRM_VERSION, lambda: apply_prospectiq_bridge_schema(bind=engine)),
+    (PROSPECTIQ_OPERATIONS_VERSION, lambda: apply_prospectiq_operations_schema(bind=engine)),
 ]
 
 

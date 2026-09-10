@@ -121,7 +121,7 @@ class SessionUser(Contract):
 
 class SessionResponse(Versioned):
     access_token: Token
-    refresh_token: Token | None = None  # Phase 1 has no refresh
+    refresh_token: Token | None = None  # Renewal secret is HttpOnly, never a JSON response
     expires_at: Positive
     bridge_session_id: UUID
     context: GrantContext
@@ -131,7 +131,7 @@ class SessionResponse(Versioned):
 
 class SessionRefreshRequest(Versioned):
     bridge_session_id: UUID
-    refresh_token: Opaque
+    refresh_token: Opaque | None = None  # Legacy shape only; runtime uses the matching HttpOnly cookie
 
 
 class Evidence(Contract):
@@ -193,6 +193,16 @@ class HandoffResponse(Versioned):
 
 class HandoffLookupRequest(Contract):
     external_id: UUID  # path parameter: PIQ public prospect UUID, not an event ID
+
+
+class ReceiptLookupRequest(Contract):
+    integration_instance_id: Text120
+    mapping_id: UUID
+    mapping_version: Positive
+    piq_client_id: UUID
+    actor_grant_id: UUID
+    integration_event_id: UUID
+    payload_hash: Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
 
 
 # Method/path and wire shapes; only the Phase 1 subset has runtime handlers.

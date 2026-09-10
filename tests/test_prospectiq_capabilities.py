@@ -55,7 +55,11 @@ def test_current_authority_loss_invalidates_existing_grant(fx,change):
     elif change=="expired":grant.absolute_expires_at=utcnow()-timedelta(seconds=1)
     else:grant.revoked_at=utcnow()
     fx.db.commit()
-    with pytest.raises(HTTPException):s.check_grant(fx.db,grant,fx.cfg)
+    if change=="role":
+        s.check_grant(fx.db,grant,fx.cfg)
+        assert grant.capabilities_json==READ
+    else:
+        with pytest.raises(HTTPException):s.check_grant(fx.db,grant,fx.cfg)
 
 
 def test_role_upgrade_never_elevates_existing_snapshot(fx):

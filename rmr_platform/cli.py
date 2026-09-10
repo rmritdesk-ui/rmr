@@ -23,6 +23,8 @@ def main() -> int:
     sub.add_parser("seed-reference")
     sub.add_parser("reset-demo")
     sub.add_parser("status")
+    sub.add_parser("bridge-health")
+    sub.add_parser("bridge-cleanup")
     backup_parser = sub.add_parser("backup")
     backup_parser.add_argument("--output", default=None)
     restore_parser = sub.add_parser("restore")
@@ -32,6 +34,12 @@ def main() -> int:
     args = parser.parse_args()
 
     from .config import settings
+    if args.command in {"bridge-health","bridge-cleanup"}:
+        from .prospectiq_bridge.operations import readiness,cleanup
+        with db_session() as db:
+            result=cleanup(db) if args.command=="bridge-cleanup" else readiness(db)
+        print(json.dumps(result,indent=2))
+        return 1 if result.get("status")=="not_ready" else 0
     if args.command in {"seed", "reset-demo"} and settings.environment == "production":
         parser.error("Demo seeding is disabled in production; use migrate for reference data.")
 
