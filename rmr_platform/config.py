@@ -71,6 +71,12 @@ class Settings:
     piq_worker_enabled: bool
     piq_worker_poll_seconds: int
     piq_job_max_attempts: int
+    prospectiq_bridge_enabled: bool = False
+    prospectiq_base_url: str = ""
+    prospectiq_integration_instance_id: str = ""
+    prospectiq_authorization_code_ttl_seconds: int = 60
+    prospectiq_assertion_audience: str = ""
+    prospectiq_assertion_issuer: str = ""
 
 
 def get_settings() -> Settings:
@@ -136,6 +142,12 @@ def get_settings() -> Settings:
         piq_worker_enabled=_env_bool("RMR_PIQ_WORKER_ENABLED", False),
         piq_worker_poll_seconds=_env_int("RMR_PIQ_WORKER_POLL_SECONDS", 5, minimum=1, maximum=300),
         piq_job_max_attempts=_env_int("RMR_PIQ_JOB_MAX_ATTEMPTS", 3, minimum=1, maximum=10),
+        prospectiq_bridge_enabled=_env_bool("RMR_PROSPECTIQ_BRIDGE_ENABLED", False),
+        prospectiq_base_url=os.getenv("RMR_PROSPECTIQ_BASE_URL", "").strip().rstrip("/"),
+        prospectiq_integration_instance_id=os.getenv("RMR_PROSPECTIQ_INTEGRATION_INSTANCE_ID", "").strip(),
+        prospectiq_authorization_code_ttl_seconds=_env_int("RMR_PROSPECTIQ_AUTHORIZATION_CODE_TTL_SECONDS", 60, minimum=1, maximum=60),
+        prospectiq_assertion_audience=os.getenv("RMR_PROSPECTIQ_ASSERTION_AUDIENCE", "").strip(),
+        prospectiq_assertion_issuer=os.getenv("RMR_PROSPECTIQ_ASSERTION_ISSUER", "").strip(),
     )
 
 

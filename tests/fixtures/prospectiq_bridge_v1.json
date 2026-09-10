@@ -1,0 +1,168 @@
+[
+  [
+    {
+      "mapping_id": "00000000-0000-4000-8000-000000000003",
+      "destination": "prospects"
+    },
+    {
+      "transaction_id": "00000000-0000-4000-8000-000000000007",
+      "expires_at": 2000000060
+    }
+  ],
+  [
+    {
+      "transaction_id": "00000000-0000-4000-8000-000000000007",
+      "callback_id": "piq-web",
+      "state": "ssssssssssssssssssssssssssssssss",
+      "nonce": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      "code_challenge": "ccccccccccccccccccccccccccccccccccccccccccc",
+      "code_challenge_method": "S256"
+    },
+    {
+      "code": "synthetic-code-not-a-real-secret-000",
+      "state": "ssssssssssssssssssssssssssssssss"
+    }
+  ],
+  [
+    {
+      "integration_instance_id": "piq-test",
+      "code": "synthetic-code-not-a-real-secret-000",
+      "code_verifier": "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+      "callback_id": "piq-web",
+      "binding_reference": "opaque-server-transaction"
+    },
+    {
+      "assertion": "synthetic-assertion-not-a-real-token",
+      "expires_at": 2000000060
+    }
+  ],
+  [
+    {
+      "integration_instance_id": "piq-test",
+      "grant_id": "00000000-0000-4000-8000-000000000001",
+      "mapping_version": 1
+    },
+    {
+      "active": true,
+      "context": {
+        "grant_id": "00000000-0000-4000-8000-000000000001",
+        "rmr_user_id": "00000000-0000-4000-8000-000000000002",
+        "mapping_id": "00000000-0000-4000-8000-000000000003",
+        "mapping_version": 1,
+        "piq_client_id": "00000000-0000-4000-8000-000000000004",
+        "integration_instance_id": "piq-test",
+        "capabilities": [
+          "prospects.read",
+          "crm.transfer"
+        ],
+        "absolute_expires_at": 2000000600
+      },
+      "reason": "active"
+    }
+  ],
+  [
+    {
+      "integration_instance_id": "piq-test",
+      "mapping_id": "00000000-0000-4000-8000-000000000003",
+      "mapping_version": 1,
+      "piq_client_id": "00000000-0000-4000-8000-000000000004",
+      "prospect_public_id": "00000000-0000-4000-8000-000000000005",
+      "integration_event_id": "00000000-0000-4000-8000-000000000008",
+      "actor_grant_id": "00000000-0000-4000-8000-000000000001",
+      "prospect": {
+        "company_name": "Synthetic company",
+        "website": "https://example.invalid/",
+        "piq_score": 35,
+        "evidence": [
+          {
+            "source_url": "https://example.invalid/about",
+            "provider": "synthetic",
+            "claim": "Synthetic source-backed statement"
+          }
+        ]
+      }
+    },
+    {
+      "receipt_id": "00000000-0000-4000-8000-000000000009",
+      "prospect_public_id": "00000000-0000-4000-8000-000000000005",
+      "status": "created",
+      "rmr_lead_id": "00000000-0000-4000-8000-000000000010",
+      "crm_path": "/crm/leads/00000000-0000-4000-8000-000000000010"
+    }
+  ],
+  [
+    {
+      "external_id": "00000000-0000-4000-8000-000000000005"
+    },
+    {
+      "receipt_id": "00000000-0000-4000-8000-000000000009",
+      "prospect_public_id": "00000000-0000-4000-8000-000000000005",
+      "status": "created",
+      "rmr_lead_id": "00000000-0000-4000-8000-000000000010",
+      "crm_path": "/crm/leads/00000000-0000-4000-8000-000000000010"
+    }
+  ],
+  [
+    {
+      "integration_instance_id": "piq-test",
+      "code": "synthetic-code-not-a-real-secret-000",
+      "code_verifier": "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+      "callback_id": "piq-web",
+      "binding_reference": "opaque-server-transaction"
+    },
+    {
+      "access_token": "synthetic-access-not-a-real-token-00",
+      "refresh_token": "synthetic-refresh-not-a-real-token-0",
+      "expires_at": 2000000300,
+      "bridge_session_id": "00000000-0000-4000-8000-000000000006",
+      "context": {
+        "grant_id": "00000000-0000-4000-8000-000000000001",
+        "rmr_user_id": "00000000-0000-4000-8000-000000000002",
+        "mapping_id": "00000000-0000-4000-8000-000000000003",
+        "mapping_version": 1,
+        "piq_client_id": "00000000-0000-4000-8000-000000000004",
+        "integration_instance_id": "piq-test",
+        "capabilities": [
+          "prospects.read",
+          "crm.transfer"
+        ],
+        "absolute_expires_at": 2000000600
+      }
+    }
+  ],
+  [
+    {
+      "bridge_session_id": "00000000-0000-4000-8000-000000000006",
+      "refresh_token": "synthetic-refresh-not-a-real-token-0"
+    },
+    {
+      "access_token": "synthetic-access-not-a-real-token-00",
+      "refresh_token": "synthetic-refresh-not-a-real-token-0",
+      "expires_at": 2000000300,
+      "bridge_session_id": "00000000-0000-4000-8000-000000000006",
+      "context": {
+        "grant_id": "00000000-0000-4000-8000-000000000001",
+        "rmr_user_id": "00000000-0000-4000-8000-000000000002",
+        "mapping_id": "00000000-0000-4000-8000-000000000003",
+        "mapping_version": 1,
+        "piq_client_id": "00000000-0000-4000-8000-000000000004",
+        "integration_instance_id": "piq-test",
+        "capabilities": [
+          "prospects.read",
+          "crm.transfer"
+        ],
+        "absolute_expires_at": 2000000600
+      }
+    }
+  ],
+  [
+    {
+      "prospect_public_id": "00000000-0000-4000-8000-000000000005",
+      "bridge_session_id": "00000000-0000-4000-8000-000000000006"
+    },
+    {
+      "handoff_id": "00000000-0000-4000-8000-000000000011",
+      "status": "pending"
+    }
+  ]
+]

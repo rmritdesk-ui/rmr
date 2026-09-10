@@ -11,6 +11,7 @@ from . import client_admin_models  # noqa: F401 - registers additive v5.2.1 corr
 from . import cumulative_product_models  # noqa: F401 - registers additive v5.2.2 repair tables
 from . import tenant_theme_models  # noqa: F401 - registers additive v5.4 tenant theme table
 from . import piq_models  # noqa: F401 - registers additive PIQ workflow tables
+from .prospectiq_bridge import models as prospectiq_bridge_models  # noqa: F401
 from . import cb1_models  # noqa: F401 - complete shared metadata before DDL
 from .commercial.models import CommercialBase
 
@@ -23,7 +24,8 @@ TENANT_THEMES_VERSION = "005.006.000-tenant-themes"
 FOUR_WORKSPACE_THEMES_VERSION = "005.006.100-four-workspace-themes"
 PIQ_PHASE0_VERSION = "005.007.000-piq-integration-foundation"
 PIQ_WORKFLOW_VERSION = "005.008.000-piq-profile-collection"
-MIGRATION_VERSION = PIQ_WORKFLOW_VERSION
+PROSPECTIQ_BRIDGE_VERSION = "005.009.000-prospectiq-bridge-foundation"
+MIGRATION_VERSION = PROSPECTIQ_BRIDGE_VERSION
 
 
 def _column_names(table_name: str, *, bind=engine) -> set[str]:
@@ -188,6 +190,17 @@ def apply_piq_profile_collection(*, bind=engine) -> None:
 def _migration_005_008_000() -> None:
     apply_piq_profile_collection(bind=engine)
 
+def apply_prospectiq_bridge_schema(*, bind=engine) -> None:
+    """Add bridge tables only; existing tenant/user/CRM rows are not changed."""
+    tables = [table for table in Base.metadata.sorted_tables
+              if table.name.startswith("prospectiq_")]
+    Base.metadata.create_all(bind=bind, tables=tables)
+
+
+def _migration_005_009_000() -> None:
+    apply_prospectiq_bridge_schema(bind=engine)
+
+
 MIGRATIONS: list[tuple[str, Callable[[], None]]] = [
     (FUNCTIONAL_EXPERIENCE_VERSION, _migration_005_001_000),
     (UNIFIED_PRODUCT_VERSION, _migration_005_003_000),
@@ -197,6 +210,7 @@ MIGRATIONS: list[tuple[str, Callable[[], None]]] = [
     (FOUR_WORKSPACE_THEMES_VERSION, _migration_005_006_100),
     (PIQ_PHASE0_VERSION, _migration_005_007_000),
     (PIQ_WORKFLOW_VERSION, _migration_005_008_000),
+    (PROSPECTIQ_BRIDGE_VERSION, _migration_005_009_000),
 ]
 
 
