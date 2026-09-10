@@ -1,4 +1,5 @@
 import {api} from '../api.js';
+import {attachProspectiqLaunch} from './prospectiq_bridge_ui.js';
 import {state} from '../state.js';
 import {$, esc, modal, toast} from '../ui.js';
 
@@ -79,6 +80,7 @@ export function profileModal(profile,ctx,view=false){
 }
 export function bindWorkflow(page,workflow,ctx,button,readOnly=false){
   const w=workflow,editable=w.collection.can_write&&!readOnly,tenantId=state.selectedTenantId;
+  attachProspectiqLaunch(page,tenantId);
   const box=document.createElement('div');box.className='piq-workflow';box.dataset.piqWorkflow='';
   const selected=read(),max=Math.min(50,w.collection.max_requested_count);
   const n=Math.min(Number(selected.quantity)||10,max);

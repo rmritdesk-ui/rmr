@@ -1,4 +1,4 @@
-"""Durable bridge records only; no provisioning, issuance, or delivery."""
+"""Durable federation records. CRM receipt/delivery remains inactive."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -69,6 +69,12 @@ class ProspectiqAuthorizationGrant(Record, Base):
     authorization_checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     managed_session_id: Mapped[str | None] = mapped_column(ForeignKey("managed_tenant_sessions.id", ondelete="SET NULL"))
     managed_session_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    browser_session_hash: Mapped[str | None] = mapped_column(String(64))
+    state_hash: Mapped[str | None] = mapped_column(String(64))
+    nonce_hash: Mapped[str | None] = mapped_column(String(64))
+    authorized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    absolute_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    destination: Mapped[str | None] = mapped_column(String(30))
 
 
 class ProspectiqCrmReceipt(UpdatedRecord, Base):

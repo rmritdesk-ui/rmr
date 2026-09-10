@@ -24,6 +24,7 @@ from .routes import auth, campaigns, crm, forecast, onboarding, piq, portfolio, 
 from .tenant_themes import router as tenant_themes_router, seed_tenant_themes
 from . import client_admin_corrections, cumulative_product_repair, v53_experience, v531_final_corrections
 from . import piq_worker, cb1_worker
+from .prospectiq_bridge.routes import router as prospectiq_bridge_router
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PUBLIC_DIR = BASE_DIR / "public"
@@ -121,6 +122,7 @@ for router in [
     v53_experience.router,
     v531_final_corrections.router,
     tenant_themes_router,
+    prospectiq_bridge_router,
 ]:
     app.include_router(router)
 
@@ -139,6 +141,13 @@ def protected_training_file(filename: str, user=Depends(current_user)):
 @app.get("/", include_in_schema=False)
 def root():
     return FileResponse(PUBLIC_DIR / "index.html")
+
+
+@app.get("/prospectiq-authorize", include_in_schema=False)
+def prospectiq_authorize_page():
+    if not settings.prospectiq_bridge_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(PUBLIC_DIR / "prospectiq-authorize.html", headers={"Cache-Control": "no-store"})
 
 
 

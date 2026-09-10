@@ -29,7 +29,9 @@
       "code": "synthetic-code-not-a-real-secret-000",
       "code_verifier": "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
       "callback_id": "piq-web",
-      "binding_reference": "opaque-server-transaction"
+      "binding_reference": "opaque-server-transaction",
+      "state": "ssssssssssssssssssssssssssssssss",
+      "nonce": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
     },
     {
       "assertion": "synthetic-assertion-not-a-real-token",
@@ -55,7 +57,10 @@
           "prospects.read",
           "crm.transfer"
         ],
-        "absolute_expires_at": 2000000600
+        "absolute_expires_at": 2000000600,
+        "rmr_tenant_id": "00000000-0000-4000-8000-000000000012",
+        "authorization_checked_at": 2000000000,
+        "destination": "prospects"
       },
       "reason": "active"
     }
@@ -108,7 +113,9 @@
       "code": "synthetic-code-not-a-real-secret-000",
       "code_verifier": "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
       "callback_id": "piq-web",
-      "binding_reference": "opaque-server-transaction"
+      "binding_reference": "opaque-server-transaction",
+      "state": "ssssssssssssssssssssssssssssssss",
+      "nonce": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
     },
     {
       "access_token": "synthetic-access-not-a-real-token-00",
@@ -126,7 +133,10 @@
           "prospects.read",
           "crm.transfer"
         ],
-        "absolute_expires_at": 2000000600
+        "absolute_expires_at": 2000000600,
+        "rmr_tenant_id": "00000000-0000-4000-8000-000000000012",
+        "authorization_checked_at": 2000000000,
+        "destination": "prospects"
       }
     }
   ],
@@ -151,7 +161,10 @@
           "prospects.read",
           "crm.transfer"
         ],
-        "absolute_expires_at": 2000000600
+        "absolute_expires_at": 2000000600,
+        "rmr_tenant_id": "00000000-0000-4000-8000-000000000012",
+        "authorization_checked_at": 2000000000,
+        "destination": "prospects"
       }
     }
   ],

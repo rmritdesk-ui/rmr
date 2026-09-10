@@ -149,7 +149,12 @@ def test_empty_disabled_config_and_native_routes(monkeypatch):
     from rmr_platform.main import app
     paths = {route.path for route in app.routes}
     assert {"/api/auth/login", "/api/tenants/{tenant_id}/piq", "/api/piq/{opportunity_id}/move-to-crm"} <= paths
-    assert not any("/api/integrations/prospectiq/v1" in path for path in paths)
+    assert "/api/integrations/prospectiq/v1/launch" in paths
+    from rmr_platform.prospectiq_bridge.config import bridge_config
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as disabled:
+        bridge_config()
+    assert disabled.value.status_code == 404
 
 
 def test_contracts_positive_and_fail_closed():

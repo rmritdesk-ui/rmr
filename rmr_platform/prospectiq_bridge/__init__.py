@@ -1,1 +1,1 @@
-"""Standalone ProspectIQ bridge foundation. No runtime endpoints or services."""
+"""Opt-in standalone ProspectIQ federation. CRM delivery remains inactive."""

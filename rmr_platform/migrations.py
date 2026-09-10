@@ -25,7 +25,8 @@ FOUR_WORKSPACE_THEMES_VERSION = "005.006.100-four-workspace-themes"
 PIQ_PHASE0_VERSION = "005.007.000-piq-integration-foundation"
 PIQ_WORKFLOW_VERSION = "005.008.000-piq-profile-collection"
 PROSPECTIQ_BRIDGE_VERSION = "005.009.000-prospectiq-bridge-foundation"
-MIGRATION_VERSION = PROSPECTIQ_BRIDGE_VERSION
+PROSPECTIQ_FEDERATION_VERSION = "005.010.000-prospectiq-federation"
+MIGRATION_VERSION = PROSPECTIQ_FEDERATION_VERSION
 
 
 def _column_names(table_name: str, *, bind=engine) -> set[str]:
@@ -201,6 +202,19 @@ def _migration_005_009_000() -> None:
     apply_prospectiq_bridge_schema(bind=engine)
 
 
+def apply_prospectiq_federation_schema(*, bind=engine) -> None:
+    apply_prospectiq_bridge_schema(bind=bind)
+    for name in ("browser_session_hash", "state_hash", "nonce_hash"):
+        _add_column_if_missing("prospectiq_authorization_grants", name, f"{name} VARCHAR(64)", bind=bind)
+    for name in ("authorized_at", "absolute_expires_at"):
+        _add_column_if_missing("prospectiq_authorization_grants", name, f"{name} TIMESTAMP WITH TIME ZONE", bind=bind)
+    _add_column_if_missing("prospectiq_authorization_grants", "destination", "destination VARCHAR(30)", bind=bind)
+
+
+def _migration_005_010_000() -> None:
+    apply_prospectiq_federation_schema(bind=engine)
+
+
 MIGRATIONS: list[tuple[str, Callable[[], None]]] = [
     (FUNCTIONAL_EXPERIENCE_VERSION, _migration_005_001_000),
     (UNIFIED_PRODUCT_VERSION, _migration_005_003_000),
@@ -211,6 +225,7 @@ MIGRATIONS: list[tuple[str, Callable[[], None]]] = [
     (PIQ_PHASE0_VERSION, _migration_005_007_000),
     (PIQ_WORKFLOW_VERSION, _migration_005_008_000),
     (PROSPECTIQ_BRIDGE_VERSION, _migration_005_009_000),
+    (PROSPECTIQ_FEDERATION_VERSION, _migration_005_010_000),
 ]
 
 

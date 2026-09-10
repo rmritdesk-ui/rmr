@@ -62,6 +62,9 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
 @router.post("/logout")
 def logout(request: Request, response: Response, user: User = Depends(current_user), db: Session = Depends(get_db)):
     require_request_origin(request)
+    if settings.prospectiq_bridge_enabled:
+        from ..prospectiq_bridge.service import revoke_browser_grants
+        revoke_browser_grants(db, user.id, request.cookies.get(COOKIE_NAME, ""))
     response.delete_cookie(COOKIE_NAME, path="/")
     audit(db, user, "auth.logout", tenant_id=user.tenant_id, entity_type="user", entity_id=user.id)
     db.commit()
