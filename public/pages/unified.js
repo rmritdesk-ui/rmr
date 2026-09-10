@@ -1,4 +1,5 @@
 import {api} from '../api.js';
+import {focusCrmLead, showCrmLeadFocus} from '../crm-lead-link.js';
 import {loadWorkflow, bindWorkflow, profileModal, applyResearchState, researchMessage, researchDetails} from './piq_workflow_ui.js';
 import {startResearch, restoreResearch} from './piq_research_ui.js';
 import {bindDiscovery, isLiveProspect, providerLabel, potentialLabel, liveDetails, evidenceLabel, matchDetails, fitLabel} from './piq_discovery_ui.js';
@@ -103,8 +104,10 @@ function editPage(pageId,data,ctx,readOnly){const p=data.pages.find(x=>x.id===pa
 
 async function crm(page,ctx,readOnly){
   const [summary,accounts,leads,opps,contacts,activities]=await Promise.all([api(`/api/tenants/${state.selectedTenantId}/crm/summary`),api(`/api/tenants/${state.selectedTenantId}/accounts`),api(`/api/tenants/${state.selectedTenantId}/leads`),api(`/api/tenants/${state.selectedTenantId}/opportunities`),api(`/api/tenants/${state.selectedTenantId}/contacts`),api(`/api/tenants/${state.selectedTenantId}/activities`)]);
+  const focus=focusCrmLead(leads.leads);if(focus)leads.leads=focus.rows;
   const tab=state.unifiedTab.crm||'opportunities';const all={accounts:accounts.accounts,leads:leads.leads,opportunities:opps.opportunities,contacts:contacts.contacts,activities:activities.activities};
   page.innerHTML=`${pageHead('CRM & Sales Pipeline','Capture every relationship, lead, opportunity and activity—then connect them to PIQ, email and reporting.',!readOnly?'<button class="button secondary" id="crm-import">Import</button><button class="button" id="crm-new">+ New</button>':'')}${readOnly?readonlyBanner():''}<div class="kpi-grid">${kpi('Accounts',number(summary.accounts),'Customer and partner relationships')}${kpi('Leads',number(summary.leads),'New prospects')}${kpi('Open opportunities',number(summary.opportunities),'Active pipeline')}${kpi('Weighted pipeline',money(summary.weighted_pipeline_cents),'Probability-adjusted')}</div><section class="card"><div class="crm-search"><input id="crm-search" placeholder="Search accounts, contacts, leads or opportunities"><button class="button secondary" id="run-crm-search">Search</button><button class="button secondary" id="crm-duplicates">Find duplicates</button></div><div id="crm-search-results"></div></section><div class="tabs">${['accounts','leads','opportunities','contacts','activities'].map(x=>`<button class="tab ${tab===x?'active':''}" data-crm-tab="${x}">${title(x)}</button>`).join('')}</div>${renderCrmTable(tab,all,readOnly)}`;
+  showCrmLeadFocus(page,focus);
   $$('[data-crm-tab]').forEach(btn=>btn.addEventListener('click',()=>{state.unifiedTab.crm=btn.dataset.crmTab;ctx.navigate('crm')}));
   $('#crm-new')?.addEventListener('click',()=>crmNewModal(tab,all,ctx));$('#crm-import')?.addEventListener('click',()=>crmImportModal(ctx));$('#run-crm-search').addEventListener('click',()=>runCrmSearch());$('#crm-search').addEventListener('keydown',e=>{if(e.key==='Enter')runCrmSearch()});$('#crm-duplicates').addEventListener('click',()=>duplicatesModal(ctx));
   $$('[data-convert-lead]').forEach(btn=>btn.addEventListener('click',async()=>{try{await api(`/api/leads/${btn.dataset.convertLead}/convert`,{method:'POST',body:{}});toast('Lead converted to account and opportunity');ctx.navigate('crm')}catch(e){toast(e.message,'error')}}));

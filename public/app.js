@@ -134,6 +134,10 @@ async function renderRoute() {
   const {route, query} = parseHash();
   state.route = route;
   state.routeQuery = query;
+  if(route==='crm' && query.lead) {
+    state.unifiedTab.crm='leads';
+    state.crmTab='leads';
+  }
   let routeTenantChanged = false;
   if (query.tenant && state.tenants.some(t=>t.id===query.tenant)) {
     routeTenantChanged = query.tenant !== state.selectedTenantId;

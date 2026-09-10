@@ -69,7 +69,7 @@ function moduleCard(label,detail,route,icon){return `<button class="v53-module-c
 async function crm(page,ctx){
   const data=await api(`/api/v53/tenants/${state.selectedTenantId}/crm/overview`);
   const query=state.routeQuery||{};
-  const tab=query.tab||state.unifiedTab.v53Crm||'opportunities';
+  const tab=query.lead?'leads':query.tab||state.unifiedTab.v53Crm||'opportunities';
   state.unifiedTab.v53Crm=tab;
   const tabs=[['accounts',`Accounts ${data.summary.accounts}`],['leads',`Leads ${data.summary.active_leads}`],['opportunities',`Opportunities ${data.summary.open_opportunities}`],['contacts',`Contacts ${data.contacts.length}`],['activities',`Activities ${data.activities.length}`]];
   const searchValue=query.search||'';
@@ -83,6 +83,11 @@ async function crm(page,ctx){
   $('#v53-crm-import').addEventListener('click',()=>simpleInfoModal('CRM Import','Use the existing preview-and-commit import workflow. Upload a clean CSV in the Product Owner test environment and confirm duplicates before committing.'));
   $('#v53-crm-duplicates').addEventListener('click',()=>duplicatesModal(ctx));
   bindCrmRecordActions(data,ctx);
+  if(query.lead) {
+    if(query.tenant===state.selectedTenantId && data.leads.some(row=>row.id===query.lead))
+      await openCrmRecord('lead',query.lead,ctx);
+    else toast('CRM lead unavailable in this authorized workspace','error');
+  }
 }
 
 function renderCrmTab(tab,data,query){

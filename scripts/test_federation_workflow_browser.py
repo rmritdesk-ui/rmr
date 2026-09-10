@@ -46,7 +46,7 @@ with sync_playwright() as p:
             token=session["access_token"]
             headers={"Authorization":"Bearer "+token}
             expected={"prospects.read"}
-            if role!="EXECUTIVE_VIEWER": expected.update(["profiles.create","profiles.update_own","discovery.run","prospects.export"])
+            if role!="EXECUTIVE_VIEWER": expected.update(["profiles.create","profiles.update_own","discovery.run","prospects.export","crm.move_to_rmr"])
             if role=="CLIENT_ADMIN": expected.update(["profiles.manage_workspace","research.run","research.confirm_cost"])
             assert set(session["context"]["capabilities"])==expected
             for path in ["/api/leads?clientId="+f["clientB"],"/api/leads/"+f["leadB"],"/api/target-profiles/"+f["profileB"],"/api/adaptive-research/runs/"+f["profileB"]]:

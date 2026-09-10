@@ -69,7 +69,7 @@ with SessionLocal() as db:
     for model in [User,Tenant]: assert db.scalar(select(func.count()).select_from(model)) == 0
     assert db.scalar(select(func.count()).select_from(ServiceCatalog)) > 0
     assert db.scalar(select(func.count()).select_from(CB1SchemaMigration)) == 1
-    assert db.scalar(select(func.count()).select_from(SchemaMigration)) == 11
+    assert db.scalar(select(func.count()).select_from(SchemaMigration)) == 12
     service=db.scalar(select(ServiceCatalog.code))
     db.add(TenantService(tenant_id="nonexistent-release-tenant",service_code=service))
     try: db.commit()

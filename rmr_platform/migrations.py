@@ -26,7 +26,8 @@ PIQ_PHASE0_VERSION = "005.007.000-piq-integration-foundation"
 PIQ_WORKFLOW_VERSION = "005.008.000-piq-profile-collection"
 PROSPECTIQ_BRIDGE_VERSION = "005.009.000-prospectiq-bridge-foundation"
 PROSPECTIQ_FEDERATION_VERSION = "005.010.000-prospectiq-federation"
-MIGRATION_VERSION = PROSPECTIQ_FEDERATION_VERSION
+PROSPECTIQ_CRM_VERSION = "005.011.000-prospectiq-crm-handoff"
+MIGRATION_VERSION = PROSPECTIQ_CRM_VERSION
 
 
 def _column_names(table_name: str, *, bind=engine) -> set[str]:
@@ -226,6 +227,7 @@ MIGRATIONS: list[tuple[str, Callable[[], None]]] = [
     (PIQ_WORKFLOW_VERSION, _migration_005_008_000),
     (PROSPECTIQ_BRIDGE_VERSION, _migration_005_009_000),
     (PROSPECTIQ_FEDERATION_VERSION, _migration_005_010_000),
+    (PROSPECTIQ_CRM_VERSION, lambda: apply_prospectiq_bridge_schema(bind=engine)),
 ]
 
 

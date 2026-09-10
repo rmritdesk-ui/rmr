@@ -1,4 +1,4 @@
-"""v1 wire contracts. Unknown fields fail closed; CRM routes remain inactive."""
+"""v1 wire contracts. Unknown fields fail closed."""
 from __future__ import annotations
 
 from typing import Annotated, Literal
@@ -16,7 +16,7 @@ Positive = Annotated[int, Field(strict=True, ge=1)]
 Score = Annotated[int, Field(strict=True, ge=0, le=100)]
 Capability = Literal["prospects.read", "profiles.manage_own", "profiles.manage_workspace",
                      "discovery.run", "research.run", "crm.transfer", "profiles.create",
-                     "profiles.update_own", "research.confirm_cost", "prospects.export"]
+                     "profiles.update_own", "research.confirm_cost", "prospects.export", "crm.move_to_rmr"]
 Destination = Literal["prospects", "target_profiles"]
 
 
@@ -76,7 +76,7 @@ class GrantContext(Contract):
     mapping_version: Positive
     piq_client_id: UUID
     integration_instance_id: Text120
-    capabilities: list[Capability] = Field(max_length=10)
+    capabilities: list[Capability] = Field(max_length=11)
     absolute_expires_at: Positive
     rmr_tenant_id: UUID
     authorization_checked_at: Positive
@@ -149,6 +149,9 @@ class Prospect(Contract):
     address: Annotated[str, StringConstraints(max_length=1000)] | None = None
     piq_score: Score | None = None  # provenance; NOT an RMR qualification decision
     evidence: list[Evidence] = Field(max_length=100)
+    industry: Annotated[str, StringConstraints(max_length=200)] | None = None
+    email_provenance: list[Evidence] = Field(default_factory=list, max_length=20)
+    intelligence_snapshot: dict = Field(default_factory=dict)
 
 
 class CrmLeadRequest(Versioned):
@@ -169,17 +172,23 @@ class CrmLeadResponse(Versioned):
     status: Literal["created", "already_exists", "pending", "failed", "tombstoned"]
     rmr_lead_id: UUID | None = None
     crm_path: Annotated[str, StringConstraints(pattern=r"^/([A-Za-z0-9_-][A-Za-z0-9/_-]*)?$")] | None = None
+    crm_url: WebUrl | None = None
+    integration_event_id: UUID | None = None
 
 
 class HandoffRequest(Versioned):
     prospect_public_id: UUID
-    bridge_session_id: UUID  # client/mapping/grant derived server-side
+    bridge_session_id: UUID | None = None  # optional consistency check, never authority
 
 
 class HandoffResponse(Versioned):
     handoff_id: UUID
     status: Literal["pending", "sending", "retry_wait", "succeeded", "failed"]
     rmr_lead_id: UUID | None = None
+    crm_url: WebUrl | None = None
+    integration_event_id: UUID | None = None
+    safe_error: str | None = None
+    outcome_unknown: bool = False
 
 
 class HandoffLookupRequest(Contract):

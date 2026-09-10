@@ -2,7 +2,7 @@
 from ..permissions import CLIENT_OPERATION_WRITERS, is_global_admin, require_client_operational_write
 
 READ = ["prospects.read"]
-OPERATE = ["profiles.create", "profiles.update_own", "discovery.run", "prospects.export"]
+OPERATE = ["profiles.create", "profiles.update_own", "discovery.run", "prospects.export", "crm.move_to_rmr"]
 ADMIN = ["profiles.manage_workspace", "research.run", "research.confirm_cost"]
 
 

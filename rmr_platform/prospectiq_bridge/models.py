@@ -1,4 +1,4 @@
-"""Durable federation records. CRM receipt/delivery remains inactive."""
+"""Durable federation and CRM receipt records."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -102,6 +102,18 @@ class ProspectiqCrmReceipt(UpdatedRecord, Base):
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     provenance_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+
+class ProspectiqCrmEvent(Record, Base):
+    __tablename__ = "prospectiq_crm_events"
+    __table_args__ = (
+        UniqueConstraint("integration_instance_id", "integration_event_id", name="uq_bridge_crm_event"),
+        CheckConstraint("length(payload_hash) = 64", name="ck_bridge_crm_event_hash"),
+    )
+    integration_instance_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    integration_event_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    receipt_id: Mapped[str] = mapped_column(ForeignKey("prospectiq_crm_receipts.id", ondelete="RESTRICT"), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class ProspectiqReplayNonce(Record, Base):

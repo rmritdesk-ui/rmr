@@ -1,4 +1,5 @@
 import {api} from '../api.js';
+import {focusCrmLead, showCrmLeadFocus} from '../crm-lead-link.js';
 import {clientAdminCorrectionApplies, renderClientAdminCorrection} from './client_admin_correction.js';
 import {state, isGlobalAdmin, selectedTenant} from '../state.js';
 import {$, $$, acronym, applyFieldErrors, badge, dateFmt, empty, esc, loading, modal, money, number, pageHead, pct, readonlyBanner, setActiveNav, statusTone, toast} from '../ui.js';
@@ -40,9 +41,11 @@ async function crm(page,ctx,readOnly){
     api(`/api/tenants/${state.selectedTenantId}/crm/summary`),api(`/api/tenants/${state.selectedTenantId}/accounts`),api(`/api/tenants/${state.selectedTenantId}/leads`),api(`/api/tenants/${state.selectedTenantId}/opportunities`),api(`/api/tenants/${state.selectedTenantId}/activities`),api(`/api/tenants/${state.selectedTenantId}/contacts`)
   ]);
   const tab=state.crmTab||'accounts';
+  const focus=focusCrmLead(leads.leads);if(focus)leads.leads=focus.rows;
   page.innerHTML=`${pageHead('CRM Workspace','Create and manage customer relationships from one accountable workspace.',readOnly?'':`<button class="button" id="crm-new">+ New</button>`)}${readOnly?readonlyBanner():''}
   <div class="kpi-grid">${kpi('Accounts',number(summary.accounts),'Customer relationships')}${kpi('Open opportunities',number(summary.opportunities),'Active pipeline')}${kpi('Leads',number(summary.leads),'New and qualified')}${kpi('Weighted pipeline',money(summary.weighted_pipeline_cents),'Probability-adjusted value')}</div>
   <div class="tabs" id="crm-tabs">${['accounts','leads','opportunities','contacts','activities'].map(x=>`<button class="tab ${tab===x?'active':''}" data-crm-tab="${x}">${title(x)}</button>`).join('')}</div><div id="crm-content" style="margin-top:14px">${crmTable(tab,{accounts:accounts.accounts,leads:leads.leads,opportunities:opportunities.opportunities,contacts:contacts.contacts,activities:activities.activities},readOnly)}</div>`;
+  showCrmLeadFocus(page,focus);
   $$('[data-crm-tab]').forEach(btn=>btn.addEventListener('click',()=>{state.crmTab=btn.dataset.crmTab;ctx.navigate('crm')}));
   $('#crm-new')?.addEventListener('click',()=>crmNewModal(tab,{accounts:accounts.accounts},ctx));
   $$('[data-account360]').forEach(btn=>btn.addEventListener('click',()=>account360Modal(btn.dataset.account360,readOnly,ctx)));
