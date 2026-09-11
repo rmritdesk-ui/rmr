@@ -25,8 +25,10 @@ with sync_playwright() as p:
         return next(data for path,status,data in reversed(seen) if status==200 and data.get("access_token"))
     def launch(tab):
         tab.goto("https://rmr.test/#piq")
-        tab.get_by_role("button",name="Open ProspectIQ",exact=True).click()
+        with tab.expect_response(lambda r:r.url.endswith('/session/exchange') and r.status==200) as exchange:
+            tab.get_by_role("button",name="Open ProspectIQ",exact=True).click()
         expect(tab.get_by_label("Current client")).to_be_disabled(timeout=30000)
+        return exchange.value.json()
     def save(tab,s):
         context.storage_state(path=str(ROOT/"phase4-private-browser.json"))
         (ROOT/"phase4-private-tab.json").write_text(json.dumps({"id":s["bridge_session_id"]}))
@@ -40,7 +42,7 @@ with sync_playwright() as p:
             page.locator('input[name="password"]').fill(f["password"])
             page.get_by_role("button",name="Sign in",exact=True).click()
             expect(page.locator('input[name="password"]')).to_have_count(0,timeout=30000)
-            launch(page);first=latest();id1=first["bridge_session_id"]
+            first=launch(page);id1=first["bridge_session_id"]
             cookies=[c for c in context.cookies("https://piq.test/") if c["name"].startswith("__Host-rmr-refresh-")]
             assert len(cookies)==1 and all(c["httpOnly"] and c["secure"] and c["sameSite"]=="Strict" and c["path"]=="/" and c["domain"]=="piq.test" for c in cookies)
             refresh="https://piq.test/api/integrations/rmr/v1/session/refresh"
@@ -59,10 +61,17 @@ with sync_playwright() as p:
             page.evaluate("Date.now=window.originalClock")
             assert len([x for x in seen if x[0].endswith("/refresh") and x[1]==200])>generation
             assert latest()["bridge_session_id"]==id1
-            second=context.new_page();second.on("response",observed);launch(second);s=latest()
+            second=context.new_page();second.on("response",observed);s=launch(second)
             assert s["bridge_session_id"]!=id1
-            page.get_by_title("Signout",exact=True).click()
-            expect(page.get_by_role("status")).to_contain_text("Your RMR login is unchanged")
+            # Bridge UI uses Back to RMR; exercise the existing session-specific
+            # logout API directly to retain the two-tab revocation regression.
+            expect(page.get_by_title("Signout",exact=True)).to_have_count(0)
+            expect(page.get_by_role("link",name="Back to RMR Global",exact=True).first).to_be_visible()
+            revoked=context.request.post("https://piq.test/api/integrations/rmr/v1/session/logout",
+                headers={"Origin":"https://piq.test","X-RMR-Bridge-Request":"1"},
+                data={"bridge_session_id":id1,"refresh_token":None})
+            assert revoked.status==200
+            assert context.request.get("https://rmr.test/api/auth/me").status==200
             second.reload();expect(second.get_by_label("Current client")).to_be_disabled(timeout=30000)
             assert latest()["bridge_session_id"]==s["bridge_session_id"]
             engine=create_engine(URL)

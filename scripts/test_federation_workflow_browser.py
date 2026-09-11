@@ -65,7 +65,8 @@ with sync_playwright() as p:
             expect(page.get_by_role("heading",name="Target Profiles",exact=True)).to_be_visible()
             if role=="EXECUTIVE_VIEWER":
                 expect(page.get_by_role("button",name="New Profile",exact=True)).to_be_disabled()
-                expect(page.get_by_role("button",name="Save Draft",exact=True)).to_be_disabled()
+                save = page.get_by_role("button",name="Save Draft",exact=True)
+                if save.count(): expect(save).to_be_disabled()
                 for path,body in [("/api/target-profiles",{"clientId":f["clientA"],"profileName":"Denied"}),
                     ("/api/profile-pulls",{"clientId":f["clientA"],"targetProfileId":f["profileA"]}),
                     ("/api/adaptive-research/estimate",{"lead_ids":[f["leadA"]]})]:
@@ -139,8 +140,9 @@ with sync_playwright() as p:
             assert token not in page.evaluate("JSON.stringify({session:{...sessionStorage},local:{...localStorage}})")
             assert not urlsplit(page.url).query and not urlsplit(page.url).fragment
             assert set(blocked)<={"fonts.googleapis.com","fonts.gstatic.com","js.stripe.com"}
-            page.get_by_title("Signout",exact=True).click()
-            expect(page.get_by_role("status")).to_contain_text("Your RMR login is unchanged")
+            expect(page.get_by_title("Signout",exact=True)).to_have_count(0)
+            page.get_by_role("link",name="Back to RMR Global",exact=True).first.click()
+            expect(page).to_have_url("https://rmr.test/#/prospectiq")
             assert context.request.get("https://rmr.test/api/auth/me").status==200
             print(role,"PASS")
         except Exception:

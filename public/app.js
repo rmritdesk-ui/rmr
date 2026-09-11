@@ -18,7 +18,7 @@ function parseHash() {
   const [routePart='', queryPart=''] = raw.split('?');
   const route = routePart.split('/')[0] || (state.user && isGlobalAdmin() ? 'portfolio' : 'home');
   const query = Object.fromEntries(new URLSearchParams(queryPart));
-  return {route, query};
+  return {route: route === 'prospectiq' ? 'piq' : route, query};
 }
 
 async function boot() {

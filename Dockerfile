@@ -22,6 +22,7 @@ COPY templates ./templates
 COPY static ./static
 COPY qa ./qa
 COPY scripts/container-entrypoint.sh /usr/local/bin/rmr-entrypoint
+COPY scripts/export_piq_profiles.py ./scripts/export_piq_profiles.py
 
 # Fail the Docker build itself if any launcher-invoked gate is omitted or cannot execute.
 RUN test -f /app/qa/v5412_interaction_regression_gate.py \
@@ -71,6 +72,7 @@ COPY --from=verification --chown=rmr:rmr /app/public ./public
 COPY --from=verification --chown=rmr:rmr /app/templates ./templates
 COPY --from=verification --chown=rmr:rmr /app/static ./static
 COPY --from=verification /usr/local/bin/rmr-entrypoint /usr/local/bin/rmr-entrypoint
+COPY --chown=rmr:rmr scripts/export_piq_profiles.py ./scripts/export_piq_profiles.py
 RUN mkdir -p /data/training /data/backups && chown -R rmr:rmr /data
 USER rmr
 EXPOSE 8000

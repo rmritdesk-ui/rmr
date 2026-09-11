@@ -1,4 +1,5 @@
 import {api} from '../api.js';
+import {renderProspectiqBridge} from './prospectiq_bridge_ui.js';
 import {loadWorkflow, bindWorkflow, profileModal, applyResearchState, researchMessage, researchDetails} from './piq_workflow_ui.js';
 import {startResearch, restoreResearch} from './piq_research_ui.js';
 import {bindDiscovery, isLiveProspect, providerLabel, potentialLabel, liveDetails, evidenceLabel, matchDetails, fitLabel} from './piq_discovery_ui.js';
@@ -184,6 +185,7 @@ function simpleInfoModal(titleText,body){modal({title:titleText,body:`<div class
 
 async function piq(page,ctx){
   const tenantId=state.selectedTenantId;
+  if(await renderProspectiqBridge(page,tenantId))return;
   const workflow=await loadWorkflow(tenantId); const data=workflow.data,target={profile:workflow.profile};
   if(state.selectedTenantId!==tenantId || state.route!=='piq')return;
   page.innerHTML=`<header data-piq-intro><div class="page-head"><div><h1>ProspectIQ</h1><p>Manage targeting profiles, discover prospects and assess fit, and review their intelligence.</p></div><button class="button secondary" id="v53-import-piq">Import List</button></div>

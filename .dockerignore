@@ -23,6 +23,7 @@ deploy/**
 !scripts/
 scripts/**
 !scripts/container-entrypoint.sh
+!scripts/export_piq_profiles.py
 !scripts/test_piq_*_postgres.py
 !scripts/test_release_postgres.py
 !tests/

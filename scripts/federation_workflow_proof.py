@@ -79,6 +79,7 @@ def run_rmr(database_url=None, seed=True):
     from rmr_platform.migrations import migrate
     from rmr_platform.db import db_session
     from rmr_platform.models import User,Tenant,TenantService
+    from rmr_platform.unified_models import PiqTargetProfile
     from rmr_platform.security import hash_password
     from rmr_platform.prospectiq_bridge.models import ProspectiqClientMapping
     migrate()
@@ -94,6 +95,15 @@ def run_rmr(database_url=None, seed=True):
                 db.add(TenantService(tenant_id=f["tenant"],service_code=code,status="active"))
             db.add(ProspectiqClientMapping(id=f["mapping"],tenant_id=f["tenant"],piq_client_id=f["clientA"],
                                           integration_instance_id="proof-piq",status="active"))
+            db.flush()
+            db.add(PiqTargetProfile(id=f['profileA'],tenant_id=f['tenant'],name='Arizona & Colorado Referral Partners',
+                industries_json=['Mortgage','Title & Escrow','Relocation','Home Services'],
+                locations_json=['Phoenix Metro, Arizona','Northern Colorado'],keywords_json=['referrals']))
+    # Export the real synthetic RMR row through the same read-only operator path.
+    if database_url.startswith('postgresql'):
+        from export_piq_profiles import export_postgres
+        payload=export_postgres(database_url,f['tenant'],'proof-piq','https://rmr.test')
+        (ROOT/'piq'/'profile-export.json').write_text(json.dumps(payload))
     import uvicorn
     uvicorn.run("rmr_platform.main:app",host="0.0.0.0",port=8000,access_log=False,log_level="warning")
 
