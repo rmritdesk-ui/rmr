@@ -1,0 +1,7 @@
+# Overlay ONLY docker-compose.production.yml; private env contains no native overrides.
+services:
+  app:
+    env_file:
+      - ${RMR_BRIDGE_ENV_FILE:?Set absolute private bridge env path}
+    volumes:
+      - ${RMR_FEDERATION_PRIVATE_DIR:?Set protected signing-key directory}:/run/rmr-federation:ro

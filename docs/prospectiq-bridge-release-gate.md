@@ -6,6 +6,11 @@ A joint release requires ALL sections. This composes maintained test helpers,
 not a second harness. **Not executed in Phase 5A**; do not label this composed
 runbook PASS merely from historical Phase 4 results.
 
+For current results see `prospectiq-predeployment-results.md`. Supply the reviewed
+current application SHAs below; Phase 4 SHAs are no longer the release candidate.
+Before commit, run against a private snapshot of reviewed working-tree source;
+after commit, use the clean git archives shown here. Never copy .env/local keys.
+
 Use a disposable LOCAL/CI Docker daemon, never the VPS. No installed Compose
 stack, .env, database, credentials or host ports. Source is git archive of approved
 SHAs, excluding ignored/private files. Builds can download dependencies; tests
@@ -20,8 +25,8 @@ Set RMR_SOURCE / PIQ_SOURCE to local clone roots, not live deployment roots.
 set -euo pipefail
 test -d "$RMR_SOURCE/.git"
 test -d "$PIQ_SOURCE/.git"
-RMR_SHA=5ff29bd876fe31950b253760578e9dc26c954179
-PIQ_SHA=1663e832df859348596f638707c207cc545a468c
+: "${RMR_SHA:?Set reviewed RMR candidate commit}"
+: "${PIQ_SHA:?Set reviewed PIQ candidate commit}"
 test "$(git -C "$RMR_SOURCE" rev-parse HEAD)" = "$RMR_SHA"
 test "$(git -C "$PIQ_SOURCE" rev-parse HEAD)" = "$PIQ_SHA"
 git -C "$RMR_SOURCE" diff --exit-code
@@ -116,7 +121,8 @@ piq_node() {
     --mount "type=bind,source=$PIQ_SRC/backend/tests,target=/app/tests,readonly" \
     --mount "type=bind,source=$PIQ_SRC/backend/src,target=/app/backend/src,readonly" \
     --mount "type=bind,source=$PIQ_SRC/worker/src,target=/app/worker/src,readonly" \
-    --mount "type=bind,source=$PIQ_SRC/frontend/src,target=/app/frontend/src,readonly" \
+    --mount "type=bind,source=$PIQ_SRC/frontend,target=/app/frontend,readonly" \
+    --mount "type=bind,source=$PIQ_SRC/frontend,target=/frontend,readonly" \
     --mount "type=bind,source=$PIQ_SRC/scripts,target=/app/scripts,readonly" \
     --mount "type=bind,source=$PIQ_SRC/db,target=/app/db,readonly" \
     --mount "type=bind,source=$PIQ_SRC/db,target=/db,readonly" \
@@ -130,7 +136,10 @@ piq_node --test scripts/test_target_profile_status.js \
   scripts/test_adaptive_research_openai.js scripts/test_adaptive_research_lead_summary.js \
   scripts/test_adaptive_research_fact_plan_observer.js scripts/test_adaptive_research_fact_planner.js \
   scripts/test_adaptive_research_attribution.js scripts/test_adaptive_research_ar2.js \
-  scripts/test_adaptive_research.js tests/rmrFederation.test.js tests/rmrIntegration.test.js
+  scripts/test_adaptive_research.js tests/rmrFederation.test.js tests/rmrIntegration.test.js \
+  tests/bridgeProfileReadiness.test.js tests/bridge_navigation.test.js \
+  tests/lead_profile_selection.test.js tests/profileDiagnostics.test.js \
+  tests/profile_bootstrap.test.js tests/profile_display.test.js tests/trustedProxy.test.js
 TEST_NET="$NET"
 piq_node --test tests/rmrIntegration.postgres.test.js tests/rmrFederation.postgres.test.js \
   tests/rmrCapabilities.postgres.test.js tests/rmrCrm.postgres.test.js \
@@ -160,7 +169,7 @@ docker run -d --name "$GATE_ID-redis" --label "rmr.release-gate=$GATE_ID" \
 docker run -d --name "$GATE_ID-rmr" --label "rmr.release-gate=$GATE_ID" \
   --network "$NET" --network-alias rmr-federation-phase4-rmr --read-only \
   --tmpfs /tmp:rw,size=512m --mount "type=bind,source=$RMR_SRC,target=/app,readonly" \
-  --mount "type=volume,source=$PROOF,target=/proof,readonly" --entrypoint python \
+  --mount "type=volume,source=$PROOF,target=/proof" --entrypoint python \
   "$RMR_IMAGE" -B /app/scripts/federation_operations_proof.py rmr
 piq_fixture_start() {
   local name=$1
@@ -238,7 +247,46 @@ wait_ready
 piq_control reconcile
 browser_gate test_federation_operations_browser.py after
 rmr_fixture inspect
+docker run --rm --network "$NET" --read-only --tmpfs /tmp:rw,size=256m -w /tmp \
+  --mount "type=bind,source=$PIQ_SRC/backend/src,target=/app/src,readonly" \
+  --mount "type=bind,source=$PIQ_SRC/backend/tests,target=/app/tests,readonly" \
+  --mount "type=volume,source=$PROOF,target=/proof,volume-subpath=piq" \
+  --entrypoint node "$PIQ_IMAGE" /app/tests/final_bridge_import.js
+browser_gate test_final_bridge_browser.py ""
 ~~~
+
+The final test follows the actual read-only RMR PostgreSQL export, twice-imported
+single PIQ profile, automatic selection, enabled mock pull, research authorization,
+idempotent CRM handoff, native View Lead and Back to RMR with login preserved.
+It runs AFTER the historical one-lead durable-count assertion: it adds its own
+second, distinct synthetic prospect and asserts exactly one receipt/lead for it.
+
+## Additional Python, direct-discovery and proxy checks
+
+Build a Python test image from the existing `python_service/Dockerfile` outside the
+network-isolated test phase and set `PIQ_GATE_PYTHON_IMAGE` to its local image tag.
+Run all `python_service/tests` with `python -B -m unittest discover -s tests -q`,
+network none, whole exported PIQ root mounted read-only at `/repo`, working directory
+`/repo/python_service`. This preserves relative references to docs/backend/worker.
+Run `node --experimental-vm-modules --test scripts/test_piq_bridge_launcher.mjs`
+against the exported RMR source with network none.
+
+For actual API/worker/Python fixture discovery use PIQ
+`backend/tests/bridge-direct.compose.yml`, a unique `-p` project name and variables
+`PIQ_SOURCE`, `PIQ_GATE_PYTHON_IMAGE`, `PIQ_GATE_BACKEND_IMAGE`, `PIQ_GATE_WORKER_IMAGE`.
+The definition publishes no ports, has an internal-only network and disposable
+PostgreSQL. Start, wait for backend container exit, require exit code zero and
+the PASS record; remove ONLY this test project's resources afterward. It exercises
+both native and imported input shapes with Google/website/RMR-grant fixture boundaries.
+
+Proxy regression: `tests/trustedProxy.test.js` tests Express exact-peer trust and
+default-off behavior. For the real Nginx template, start the disposable
+`tests/proxyHeaders.runtime.mjs` echo on alias `backend`, and two nginx:1.27-alpine
+containers using the production template, aliases `proxy-trusted` and
+`proxy-untrusted`. Trust only the isolated test subnet in the first, and TEST-NET
+`192.0.2.2/32` in the second. Run `tests/proxyHeaders.check.mjs` on that internal
+network. It requires trusted HTTPS preservation, untrusted-header rejection and
+HTTP fallback. This does not validate the actual Apache/cPanel server.
 
 Required: native RMR/PIQ login; native PIQ two-client/generic-CRM fixture;
 admin/sales/viewer capability and foreign-client denials; mock discovery/research;

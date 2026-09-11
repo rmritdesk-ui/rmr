@@ -1,5 +1,9 @@
 # Phase 5A - production deployment preparation
 
+Current preparation addendum: `prospectiq-predeployment.md`. It supersedes the
+historical uncommitted-document status, return route and unresolved local proxy
+work below; production server verification is still outstanding.
+
 Date: 2026-09-10. PREPARATION ONLY. Commands describe future, separately approved
 operator actions. Do not run fixture initializers, seed/reset commands, tests or
 SQLite backup helpers against an installed application/database.
@@ -182,7 +186,7 @@ previously exposed locally/in chat; unrelated native rotation is a separate task
 | PIQ origin | https://<PIQ_HOST>, different hostname, not only different port |
 | Callback | https://<PIQ_HOST>/ exactly; callback ID piq-web |
 | RMR authorization landing | https://<RMR_HOST>/prospectiq-authorize |
-| Return to RMR | https://<RMR_HOST>/; no RMR_RETURN_URL config exists |
+| Return to RMR | https://<RMR_HOST>/#/prospectiq; derived from origin, no RMR_RETURN_URL config exists |
 | View accepted Lead | https://<RMR_HOST>/#/crm?tenant=<TENANT_UUID>&lead=<LEAD_UUID> |
 | Launch destinations | prospects or target_profiles, not arbitrary URLs |
 

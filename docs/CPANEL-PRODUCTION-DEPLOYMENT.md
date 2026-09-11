@@ -1,5 +1,10 @@
 # RMR production preparation: cPanel/Apache VPS
 
+For the current standalone ProspectIQ integration use `prospectiq-predeployment.md`
+alongside this native deployment reference. The native PIQ example flags now default
+OFF; the historical live-native configuration description below is not an instruction
+to enable a second discovery application during the standalone bridge rollout.
+
 This is a future deployment runbook, not authorization to deploy. The inspected
 target runs AlmaLinux 9.8, Docker 29.3.1 and Compose 5.1.1. cPanel/Apache already
 owns ports 80/443. Do not install another public Nginx service or change existing
