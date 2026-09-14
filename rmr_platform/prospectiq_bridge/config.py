@@ -40,14 +40,19 @@ class BridgeConfig:
 def bridge_config():
     if not settings.prospectiq_bridge_enabled:
         raise HTTPException(404, "ProspectIQ bridge is disabled")
+    category = 'invalid_rmr_origin'
     try:
         rmr = origin(settings.base_url)
+        category = 'invalid_piq_origin'
         piq = origin(settings.prospectiq_base_url)
+        category = 'secure_cookie_or_hostname_requirement'
         if urlsplit(rmr).hostname == urlsplit(piq).hostname or not settings.cookie_secure:
             raise ValueError("Host-only secure cookies require separate hostnames")
+        category = 'callback_mismatch'
         callback = os.getenv("RMR_PROSPECTIQ_CALLBACK_URL", "")
         if callback != piq + "/":
             raise ValueError("Callback must be the registered PIQ root")
+        category = 'grant_hmac_or_identity_configuration'
         key_id = os.getenv("RMR_PROSPECTIQ_SIGNING_KEY_ID", "").strip()
         hmac_id = os.getenv("RMR_PROSPECTIQ_HMAC_KEY_ID", "").strip()
         secret = os.getenv("RMR_PROSPECTIQ_HMAC_SECRET", "")
@@ -55,17 +60,22 @@ def bridge_config():
                 or not settings.prospectiq_integration_instance_id
                 or not settings.prospectiq_assertion_issuer or not settings.prospectiq_assertion_audience):
             raise ValueError("Dedicated bridge configuration required")
+        category = 'signing_key_missing_unreadable_or_invalid'
         key = serialization.load_pem_private_key(
             Path(os.environ["RMR_PROSPECTIQ_SIGNING_PRIVATE_KEY_FILE"]).read_bytes(), password=None)
         if not isinstance(key, RSAPrivateKey) or key.key_size < 2048:
             raise ValueError("RSA signing key required")
+        category = 'issuer_or_ttl_mismatch'
         ttl = int(os.getenv("RMR_PROSPECTIQ_GRANT_MAX_SECONDS", "28800"))
         if not 1800 <= ttl <= 28800 or settings.prospectiq_assertion_issuer != rmr:
             raise ValueError("Bounded grant and exact issuer required")
+        category = 'grant_hmac_or_identity_configuration'
         keys = verification_keys(os.getenv("RMR_PROSPECTIQ_HMAC_KEYS_JSON", "{}"),
                                  {hmac_id: secret}, (settings.secret_key,))
         return BridgeConfig(rmr, piq, callback, settings.prospectiq_integration_instance_id,
                             settings.prospectiq_assertion_issuer, settings.prospectiq_assertion_audience,
                             key_id, key, hmac_id, secret, settings.prospectiq_authorization_code_ttl_seconds, ttl, keys)
-    except (ValueError, KeyError, OSError):
-        raise HTTPException(503, "ProspectIQ bridge configuration unavailable") from None
+    except (ValueError, KeyError, OSError, TypeError):
+        error = HTTPException(503, "ProspectIQ bridge configuration unavailable")
+        error.bridge_category = category
+        raise error from None

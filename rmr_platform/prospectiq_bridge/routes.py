@@ -149,4 +149,5 @@ async def check(payload: GrantCheckRequest, request: Request, db: Session = Depe
             grant.status = "revoked"
             grant.revoked_at = service.utcnow()
             db.commit()
+            service.log_event('authorization_revoked', tenant_id=grant.tenant_id, mapping_id=grant.mapping_id)
         return {"active": False, "reason": "access_denied", "context": None}

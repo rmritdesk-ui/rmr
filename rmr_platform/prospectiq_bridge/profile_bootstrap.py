@@ -1,9 +1,5 @@
 """Authenticated, one-time initialization. PIQ owns durable completion and profiles."""
-import hashlib
-import hmac
 import json
-import secrets
-import time
 
 import httpx
 from fastapi import HTTPException
@@ -13,6 +9,7 @@ from ..unified_models import PiqTargetProfile
 from . import service
 from .provisioning import mapping_for, require_provision_authority
 from .profile_export import serialize_export
+from .partner import partner_headers
 
 BOOTSTRAP_PATH = '/api/integrations/rmr/v1/profiles/bootstrap'
 
@@ -25,12 +22,7 @@ def remote(cfg, payload, transport=None):
     body = json.dumps(payload, separators=(',', ':')).encode()
     if len(body) > 65536:
         raise HTTPException(413, 'Initial profiles exceed the bootstrap limit. Contact your administrator.')
-    stamp, nonce = str(int(time.time())), secrets.token_hex(32)
-    canonical = '\n'.join([cfg.instance, cfg.hmac_key_id, 'POST', BOOTSTRAP_PATH,
-                           stamp, nonce, hashlib.sha256(body).hexdigest()])
-    headers = {'Content-Type': 'application/json', 'X-Bridge-Instance': cfg.instance,
-               'X-Bridge-Key': cfg.hmac_key_id, 'X-Bridge-Timestamp': stamp, 'X-Bridge-Nonce': nonce,
-               'X-Bridge-Signature': hmac.new(cfg.hmac_secret.encode(), canonical.encode(), hashlib.sha256).hexdigest()}
+    headers = partner_headers(cfg, BOOTSTRAP_PATH, body)
     try:
         with httpx.Client(timeout=15, follow_redirects=False, trust_env=False, transport=transport) as client:
             with client.stream('POST', cfg.piq_origin + BOOTSTRAP_PATH, content=body, headers=headers) as response:
@@ -62,6 +54,7 @@ def ensure_bootstrap(db, user, tenant_id, request, cfg, transport=None):
                 'integration_instance_id': cfg.instance, 'operation': 'status'}
     result = remote(cfg, envelope, transport)
     if result['status'] == 'completed':
+        service.log_event('bootstrap_reused', tenant_id=tenant_id, mapping_id=mapping.id)
         return result  # Do not even read RMR profiles after completion.
     require_provision_authority(db, user, tenant_id)
     profiles = db.scalars(select(PiqTargetProfile).where(PiqTargetProfile.tenant_id == tenant_id,
@@ -70,4 +63,5 @@ def ensure_bootstrap(db, user, tenant_id, request, cfg, transport=None):
     result = remote(cfg, {**envelope, 'operation': 'import', 'export': export}, transport)
     if result['status'] != 'completed':
         raise HTTPException(503, 'Initial Target Profiles could not be prepared. Retry preparation.')
+    service.log_event('bootstrap_completed', tenant_id=tenant_id, mapping_id=mapping.id)
     return result

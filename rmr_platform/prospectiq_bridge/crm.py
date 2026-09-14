@@ -46,7 +46,9 @@ def crm_config():
                                  forbidden=(settings.secret_key, *(cfg.hmac_keys or {cfg.hmac_key_id: cfg.hmac_secret}).values()))
         return CrmConfig(cfg, keys)
     except (ValueError, TypeError):
-        raise HTTPException(503, {"code": "crm_configuration_unavailable"}) from None
+        error = HTTPException(503, {"code": "crm_configuration_unavailable"})
+        error.bridge_category = 'crm_hmac_unavailable'
+        raise error from None
 
 
 def deny(code, status=403):

@@ -84,3 +84,14 @@ def test_cpanel_proxy_example_preserves_host_and_sets_https():
     for expected in ['ProxyRequests Off', 'ProxyPreserveHost On', 'ProxyAddHeaders On',
                      'RequestHeader set X-Forwarded-Proto "https"', 'http://127.0.0.1:18100/']:
         assert expected in text
+
+
+def test_existing_volume_upgrade_never_guesses_storage_or_reseeds():
+    overlay=(ROOT/'deploy/compose.existing-data.yml').read_text()
+    assert overlay.count('external: true')==2
+    assert '${RMR_APP_VOLUME:?' in overlay and '${RMR_POSTGRES_VOLUME:?' in overlay
+    guide=(ROOT/'docs/FINAL-DYNAMIC-INTEGRATION-DEPLOYMENT.md').read_text()
+    for expected in ['schema-init --confirm','bridge-health','/api/health',
+                     'Do not convert SQLite','No manual mapping/export/import',
+                     'never replay demo initialization','Keep all additive tables']:
+        assert expected in guide

@@ -1,0 +1,9 @@
+# Upgrade overlay for the maintained PostgreSQL production definition ONLY.
+# Existing SQLite installations retain their installed base Compose and DB URL.
+volumes:
+  app-data:
+    external: true
+    name: ${RMR_APP_VOLUME:?Exact installed app data volume required}
+  postgres-data:
+    external: true
+    name: ${RMR_POSTGRES_VOLUME:?Exact installed PostgreSQL volume required}

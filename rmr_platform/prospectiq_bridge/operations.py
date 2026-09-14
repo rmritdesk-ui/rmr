@@ -1,5 +1,6 @@
 """Local bridge readiness/maintenance and signed receipt-only reconciliation."""
 import hashlib
+import logging
 from datetime import timedelta
 from sqlalchemy import select, delete, update, func, text
 from fastapi import HTTPException
@@ -17,28 +18,39 @@ def validate_startup():
         try:
             bridge_config()
             crm_config()
-        except Exception:
-            raise RuntimeError("Enabled ProspectIQ bridge configuration is unsafe or incomplete") from None
+        except Exception as error:
+            category = getattr(error, 'bridge_category', 'configuration_unavailable')
+            logging.getLogger(__name__).error('prospectiq.configuration.failed category=%s', category)
+            raise RuntimeError("Enabled ProspectIQ bridge configuration is unsafe or incomplete: " + category) from None
 
 
 def readiness(db):
     result={"enabled":settings.prospectiq_bridge_enabled,"configuration":False,"federation_signing":False,
-            "service_hmac":False,"database":False,"mapping_subsystem":False}
+            "service_hmac":False,"grant_hmac":False,"crm_hmac":False,"database":False,"mapping_subsystem":False}
     if not result["enabled"]:
         return {**result,"status":"disabled"}
+    failures=[]
     try:
         bridge_config()
         result["federation_signing"]=True
+        result['grant_hmac']=True
         crm_config()
+        result['crm_hmac']=True
         result["service_hmac"]=True
         result["configuration"]=True
+    except Exception as error:
+        failures.append(getattr(error,'bridge_category','configuration_unavailable'))
+    try:
         db.execute(text("SELECT 1"))
         result["database"]=True
+    except Exception:
+        db.rollback();failures.append('database_unavailable')
+    try:
         db.scalar(select(Mapping.id).limit(1))
         result["mapping_subsystem"]=True
     except Exception:
-        db.rollback()
-    return {**result,"status":"ready" if all(result.values()) else "not_ready"}
+        db.rollback();failures.append('mapping_subsystem_unavailable')
+    return {**result,"failure_categories":failures,"status":"not_ready" if failures else "ready"}
 
 
 def cleanup(db, now=None):

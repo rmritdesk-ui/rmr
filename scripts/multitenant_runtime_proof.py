@@ -17,8 +17,9 @@ if action=='ready':
  try:
   with db_session() as db:assert db.get(Tenant,f['tenant'])
  except Exception:raise SystemExit(1)
-elif action=='seed':
+elif action in ('seed','upgrade-seed'):
  actors=[{'name':'Kerry Laughlin Real Estate','tenant':f['tenant'],'email':f['actors']['CLIENT_ADMIN']['email'],'user':f['user'],'profile':True}]
+ if action=='upgrade-seed':actors[0]['profile']=False
  with db_session() as db:
   db.get(Tenant,f['tenant']).name=actors[0]['name']
   for name,profile in [('Profound',True),('Synthetic Dynamic Tenant',False)]:

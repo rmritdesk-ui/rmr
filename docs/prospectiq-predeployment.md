@@ -1,5 +1,9 @@
 # Final local preparation / future cPanel deployment
 
+> Historical preparation record. For the final dynamic release use
+> `FINAL-DYNAMIC-INTEGRATION-DEPLOYMENT.md`. Manual per-tenant mapping/export/import
+> steps below are superseded and are NOT part of the normal launch/deployment path.
+
 No deployment, push, DNS change, production certificate or production secret generation is authorized by this document. Use reviewed commit/image IDs, not historical Phase 4 SHAs. Phase 5A documents remain background inventories; this addendum supersedes their old UI/return/proxy preparation status.
 
 ## Established topology and placeholders

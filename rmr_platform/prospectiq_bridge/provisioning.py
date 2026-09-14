@@ -3,11 +3,6 @@
 Recovery needs no extra RMR state: PIQ owns the unique external-workspace ledger;
 RMR's existing unique mapping is the local commit record. Never import profiles.
 """
-import hashlib
-import hmac
-import secrets
-import time
-
 import httpx
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -19,6 +14,7 @@ from . import service
 from .capabilities import capabilities_for
 from .contracts import WorkspaceRequest, WorkspaceResponse
 from .models import ProspectiqClientMapping as Mapping
+from .partner import partner_headers
 
 WORKSPACE_PATH = "/api/integrations/rmr/v1/workspaces/resolve"
 
@@ -44,12 +40,7 @@ def resolve_remote(cfg, tenant, transport=None):
     # Only server-read display metadata is signed. Browser cannot supply client IDs,
     # destination URLs, issuer, instance, display name, or service credentials.
     body = WorkspaceRequest(rmr_tenant_id=tenant.id, tenant_name=tenant.name).model_dump_json().encode()
-    stamp, nonce = str(int(time.time())), secrets.token_hex(32)
-    canonical = "\n".join([cfg.instance, cfg.hmac_key_id, "POST", WORKSPACE_PATH,
-                            stamp, nonce, hashlib.sha256(body).hexdigest()])
-    headers = {"Content-Type": "application/json", "X-Bridge-Instance": cfg.instance,
-               "X-Bridge-Key": cfg.hmac_key_id, "X-Bridge-Timestamp": stamp, "X-Bridge-Nonce": nonce,
-               "X-Bridge-Signature": hmac.new(cfg.hmac_secret.encode(), canonical.encode(), hashlib.sha256).hexdigest()}
+    headers = partner_headers(cfg, WORKSPACE_PATH, body)
     try:
         with httpx.Client(timeout=5, follow_redirects=False, trust_env=False, transport=transport) as client:
             with client.stream("POST", cfg.piq_origin + WORKSPACE_PATH, content=body, headers=headers) as response:
@@ -74,6 +65,7 @@ def provision(db, user, tenant_id, request, cfg, transport=None):
     require_provision_authority(db, user, tenant_id)
     row = mapping_for(db, tenant_id, cfg)
     if row:
+        service.log_event('mapping_reused', tenant_id=tenant_id, mapping_id=row.id, status=row.status)
         return ready(row)  # Preserve reviewed/manual mappings WITHOUT contacting PIQ.
     tenant = db.get(Tenant, tenant_id)
     client_id = resolve_remote(cfg, tenant, transport)

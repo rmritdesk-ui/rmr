@@ -29,6 +29,11 @@ def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def log_event(event, **metadata):
+    safe = {key: value for key, value in metadata.items() if key in ('tenant_id', 'mapping_id', 'status')}
+    logging.getLogger('rmr.bridge').info(json.dumps({'event': 'prospectiq_' + event, **safe}))
+
+
 def aware(value):
     return value.replace(tzinfo=timezone.utc) if value and value.tzinfo is None else value
 
@@ -100,6 +105,7 @@ def create_launch(db, user, payload, request, cfg):
                 destination=payload.destination)
     db.add(row)
     db.commit()
+    log_event('launch_created', tenant_id=row.tenant_id, mapping_id=row.mapping_id)
     return {"version": "1", "transaction_id": row.id, "expires_at": int(aware(row.code_expires_at).timestamp()),
             "launch_url": cfg.piq_origin + "/#rmr-start=" + row.id}
 
@@ -194,6 +200,7 @@ def exchange_code(db, payload, cfg):
     assertion = jwt.encode(claims.model_dump(mode="json"), cfg.private_key, algorithm="RS256",
                            headers={"kid": cfg.key_id, "typ": "rmr-piq-federation-v1"})
     db.commit()
+    log_event('federation_exchanged', tenant_id=row.tenant_id, mapping_id=row.mapping_id)
     return {"version": "1", "assertion": assertion, "expires_at": expires}
 
 
