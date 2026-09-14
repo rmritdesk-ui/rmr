@@ -109,6 +109,11 @@ async def check_mapping(payload: MappingCheckRequest, request: Request,
     active = bool(row and row.status == 'active' and row.mapping_version == payload.mapping_version
                   and row.tenant_id == str(payload.rmr_tenant_id) and row.piq_client_id == str(payload.piq_client_id)
                   and row.integration_instance_id == payload.integration_instance_id == cfg.instance)
+    if active:
+        try:
+            service.require_operational_tenant(db, row.tenant_id)
+        except HTTPException:
+            active = False
     return JSONResponse({'active': active}, headers={'Cache-Control': 'no-store'})
 
 

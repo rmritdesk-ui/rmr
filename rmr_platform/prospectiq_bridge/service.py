@@ -45,8 +45,7 @@ def authorized_tenant(db, user, tenant_id, managed_id=None):
     """Existing tenant authority, also usable before a client mapping exists."""
     if not user or not user.active or user.must_change_password:
         raise HTTPException(403, "Bridge user unavailable")
-    if not db.get(Tenant, tenant_id):
-        raise HTTPException(403, "Tenant unavailable")
+    require_operational_tenant(db, tenant_id)
     require_tenant_access(user, tenant_id)
     managed = None
     if is_global_admin(user):
@@ -64,6 +63,14 @@ def authorized_tenant(db, user, tenant_id, managed_id=None):
         raise HTTPException(403, "Tenant role required")
     _require_piq_access(db, tenant_id)
     return managed
+
+
+def require_operational_tenant(db, tenant_id):
+    # Existing operational set used by routes/services.py; not a new status model.
+    tenant = db.get(Tenant, tenant_id, populate_existing=True)
+    if not tenant or tenant.status not in ('onboarding', 'private', 'live'):
+        raise HTTPException(403, 'Tenant unavailable')
+    return tenant
 
 
 def browser_origin(request, cfg):
