@@ -15,6 +15,7 @@ from . import service
 from . import crm
 from . import provisioning
 from . import profile_bootstrap
+from .history_copy import HistoryCopyRequest, copy_history
 from .contracts import MappingCheckRequest
 from .contracts import ProvisionRequest, ProvisionResponse
 from .contracts import CrmLeadRequest, CrmLeadResponse, ReceiptLookupRequest
@@ -99,6 +100,12 @@ def bootstrap_profiles(payload: ProvisionRequest, request: Request, user=Depends
                        db: Session = Depends(get_db), cfg=Depends(bridge_config)):
     result = profile_bootstrap.ensure_bootstrap(db, user, str(payload.tenant_id), request, cfg)
     return JSONResponse(result, headers={'Cache-Control': 'no-store'})
+
+
+@router.post('/profiles/history-copy')
+def copy_historical_profile(payload: HistoryCopyRequest, request: Request, user=Depends(current_user),
+                            db: Session = Depends(get_db), cfg=Depends(bridge_config)):
+    return JSONResponse(copy_history(db,user,payload,request,cfg),headers={'Cache-Control':'no-store'})
 
 
 @router.post('/mappings/check')

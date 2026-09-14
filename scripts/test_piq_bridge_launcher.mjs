@@ -2,23 +2,33 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
 const source=readFileSync(new URL('../public/pages/prospectiq_bridge_ui.js',import.meta.url),'utf8');
 async function setup(api) {
  const state={selectedTenantId:'tenant-a',route:'piq'},calls=[];
- const context=vm.createContext({URL,encodeURIComponent,location:{assign:url=>calls.push(url)}});
- const button={disabled:false,addEventListener:(_,fn)=>{button.click=fn;}};
- const page={isConnected:true,innerHTML:'native sentinel',querySelector:()=>button};
+ const storage=new Map(),nodes=new Map(),messages=[];
+ const context=vm.createContext({URL,encodeURIComponent,Set,crypto:{randomUUID},confirm:()=>true,
+   localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},location:{assign:url=>calls.push(url)}});
+ const node=selector=>{
+  if(!nodes.has(selector)){
+   const n={disabled:false,innerHTML:'',dataset:{},addEventListener:(_,fn)=>{n.click=fn;},querySelector:s=>node(s),
+    querySelectorAll:()=>[...n.innerHTML.matchAll(/data-copy-profile="([^"]+)"/g)].map(m=>{const b=node('[data-copy-profile="'+m[1]+'"]');b.dataset.copyProfile=m[1];return b;})};
+   nodes.set(selector,n);
+  }return nodes.get(selector);
+ };
+ const button=node('[data-open-prospectiq]');
+ const page={isConnected:true,innerHTML:'native sentinel',querySelector:node};
  const esc=v=>String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
- const deps={'../api.js':{api},'../state.js':{state},'../ui.js':{esc,toast:()=>{}}};
+ const deps={'../api.js':{api},'../state.js':{state},'../ui.js':{esc,toast:m=>messages.push(m)}};
  const module=new vm.SourceTextModule(source,{context});
  await module.link(name=>new vm.SyntheticModule(Object.keys(deps[name]),function(){for(const [key,value]of Object.entries(deps[name]))this.setExport(key,value);},{context}));
  await module.evaluate();
- return {render:()=>module.namespace.renderProspectiqBridge(page,'tenant-a'),page,button,state,calls};
+ return {render:()=>module.namespace.renderProspectiqBridge(page,'tenant-a'),page,button,state,calls,node,storage,messages};
 }
 test('explicit bridge OFF preserves native page',async()=>{
  const x=await setup(async()=>({enabled:false}));assert.equal(await x.render(),false);assert.equal(x.page.innerHTML,'native sentinel');
 });
-test('bridge ON renders summary only and launches Leads',async()=>{
+test('bridge ON defaults to clean launcher; source cards are secondary history',async()=>{
  const requests=[];
  const x=await setup(async(path,options)=>{
   requests.push([path,options]);
@@ -27,10 +37,14 @@ test('bridge ON renders summary only and launches Leads',async()=>{
   if(path.endsWith('/launch'))return {launch_url:'https://piq.localhost/#rmr-start=test'};
   return {profiles:[{id:'source-a',name:'Original <profile>',active:true,industries_json:['Mortgage'],locations_json:['Phoenix']}]};
  });
- assert.equal(await x.render(),true);assert.match(x.page.innerHTML,/Original &lt;profile>/);
+ assert.equal(await x.render(),true);assert.ok(!x.page.innerHTML.includes('Original'));
  assert.match(x.page.innerHTML,/Open ProspectIQ/);
  for(const label of ['Pull Leads','Run Adaptive Research','Move to CRM','Create Target Profile','data-open-piq'])assert.ok(!x.page.innerHTML.includes(label));
- await x.button.click();assert.equal(requests.at(-1)[1].body.destination,'prospects');assert.equal(x.calls.length,1);
+ await x.node('[data-piq-history]').click();await new Promise(r=>setImmediate(r));
+ assert.match(x.node('[data-piq-history-content]').innerHTML,/Original &lt;profile>/);
+ assert.match(x.node('[data-piq-history-content]').innerHTML,/Historical RMR source/);
+ assert.match(x.node('[data-piq-history-content]').innerHTML,/not automatically synchronized/);
+ await x.node('[data-piq-main]').click();await x.button.click();assert.equal(requests.at(-1)[1].body.destination,'prospects');assert.equal(x.calls.length,1);
 });
 test('unavailable or unauthorized bridge fails closed, not native fallback',async()=>{
  const x=await setup(async()=>{throw Error('unavailable');});assert.equal(await x.render(),true);assert.match(x.page.innerHTML,/data-piq-bridge-unavailable/);
@@ -41,7 +55,34 @@ test('tenant change during loading cannot display or launch another tenant',asyn
 });
 test('profile-summary read failure still permits authorized launcher',async()=>{
  const x=await setup(async(path)=>{if(path.includes('availability'))return {enabled:true,mapping_id:'mapping-a'};if(path.endsWith('/profiles/bootstrap'))return {status:'completed'};throw Error('summary unavailable');});
- assert.equal(await x.render(),true);assert.match(x.page.innerHTML,/summary is temporarily unavailable/);assert.match(x.page.innerHTML,/data-open-prospectiq/);
+ assert.equal(await x.render(),true);assert.match(x.page.innerHTML,/data-open-prospectiq/);
+ await x.node('[data-piq-history]').click();await new Promise(r=>setImmediate(r));
+ assert.match(x.node('[data-piq-history-content]').innerHTML,/temporarily unavailable/);
+});
+
+test('explicit copy persists retry identity, blocks double click and opens existing SSO profile destination',async()=>{
+ const requests=[];let release,attempt=0;
+ const x=await setup(async(path,options)=>{
+  if(path.includes('availability'))return {enabled:true,mapping_id:'mapped'};
+  if(path.endsWith('/profiles/bootstrap'))return {status:'completed'};
+  if(path.endsWith('/history-copy')){
+   requests.push(options.body);attempt++;
+   if(attempt===1){await new Promise(r=>release=r);throw Error('response lost');}
+   return {profile_id:'new',status:'draft'};
+  }
+  if(path.endsWith('/launch')){assert.equal(options.body.destination,'target_profiles');return {launch_url:'https://piq.test/#rmr-start=existing-flow'};}
+  return {profiles:[{id:'source-a',name:'Historical'}]};
+ });
+ await x.render();assert.equal(requests.length,0);
+ await x.node('[data-piq-history]').click();await new Promise(r=>setImmediate(r));
+ const button=x.node('[data-copy-profile="source-a"]');const first=button.click();await new Promise(r=>setImmediate(r));
+ await button.click();assert.equal(requests.length,1);release();await first;
+ await x.render();assert.equal(requests.length,1); // reopening never copies
+ await x.node('[data-piq-history]').click();await new Promise(r=>setImmediate(r));await button.click();
+ assert.equal(requests[0].request_id,requests[1].request_id);assert.deepEqual(Object.keys(requests[0]).sort(),['request_id','source_profile_id']);
+ assert.match(x.node('[data-copy-result="source-a"]').innerHTML,/activate it before pulling leads/);
+ await x.node('[data-open-copy]').click();assert.equal(x.calls.length,1);
+ await button.click();assert.notEqual(requests[2].request_id,requests[1].request_id);
 });
 test('first use prepares only through POST then permits the existing launch',async()=>{
  const requests=[];let x;
