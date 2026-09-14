@@ -14,6 +14,8 @@ from .models import ProspectiqClientMapping as Mapping, ProspectiqAuthorizationG
 from . import service
 from . import crm
 from . import provisioning
+from . import profile_bootstrap
+from .contracts import MappingCheckRequest
 from .contracts import ProvisionRequest, ProvisionResponse
 from .contracts import CrmLeadRequest, CrmLeadResponse, ReceiptLookupRequest
 
@@ -90,6 +92,24 @@ def provision_workspace(payload: ProvisionRequest, request: Request, user=Depend
 def launch(payload: LaunchRequest, request: Request, user=Depends(current_user),
            db: Session = Depends(get_db), cfg=Depends(bridge_config)):
     return service.create_launch(db, user, payload, request, cfg)
+
+
+@router.post('/profiles/bootstrap')
+def bootstrap_profiles(payload: ProvisionRequest, request: Request, user=Depends(current_user),
+                       db: Session = Depends(get_db), cfg=Depends(bridge_config)):
+    result = profile_bootstrap.ensure_bootstrap(db, user, str(payload.tenant_id), request, cfg)
+    return JSONResponse(result, headers={'Cache-Control': 'no-store'})
+
+
+@router.post('/mappings/check')
+async def check_mapping(payload: MappingCheckRequest, request: Request,
+                        db: Session = Depends(get_db), cfg=Depends(bridge_config)):
+    service.authenticate_service(db, request.headers, await request.body(), request.method, request.url.path, cfg)
+    row = db.get(Mapping, str(payload.mapping_id))
+    active = bool(row and row.status == 'active' and row.mapping_version == payload.mapping_version
+                  and row.tenant_id == str(payload.rmr_tenant_id) and row.piq_client_id == str(payload.piq_client_id)
+                  and row.integration_instance_id == payload.integration_instance_id == cfg.instance)
+    return JSONResponse({'active': active}, headers={'Cache-Control': 'no-store'})
 
 
 @router.post("/authorize", response_model=AuthorizeResponse)

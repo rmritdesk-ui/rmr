@@ -42,6 +42,14 @@ class ProvisionResponse(Versioned):
     status: Literal["ready"] = "ready"
 
 
+class MappingCheckRequest(Versioned):
+    mapping_id: UUID
+    mapping_version: Positive
+    rmr_tenant_id: UUID
+    piq_client_id: UUID
+    integration_instance_id: Text120
+
+
 class WorkspaceRequest(Versioned):
     rmr_tenant_id: UUID
     tenant_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]

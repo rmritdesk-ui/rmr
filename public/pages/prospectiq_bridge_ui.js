@@ -30,6 +30,18 @@ export async function renderProspectiqBridge(page, tenantId) {
       }
     }
     if (availability.enabled !== true || !availability.mapping_id) throw new Error('ProspectIQ mapping unavailable');
+    page.innerHTML = '<section class="card"><h1>ProspectIQ</h1><p role="status">Preparing initial Target Profiles…</p></section>';
+    try {
+      const bootstrap = await api('/api/integrations/prospectiq/v1/profiles/bootstrap', {method:'POST',body:{tenant_id:tenantId}});
+      if (!current()) return true;
+      if (bootstrap.status !== 'completed') throw new Error('Preparation incomplete');
+    } catch {
+      if (current()) {
+        page.innerHTML = '<section class="card" data-piq-bridge-unavailable><h1>ProspectIQ</h1><p>Initial Target Profiles could not be prepared. An operational user must complete first-use preparation. Retry or contact your administrator.</p><button class="button" data-retry-prospectiq>Retry preparation</button></section>';
+        page.querySelector('[data-retry-prospectiq]').addEventListener('click', () => { if (current()) renderProspectiqBridge(page,tenantId); });
+      }
+      return true;
+    }
     let profiles = [];
     let summaryUnavailable = false;
     try {
@@ -43,7 +55,7 @@ export async function renderProspectiqBridge(page, tenantId) {
       ${profiles.map(profile => `<article class="notice-card" data-piq-source-profile="${esc(profile.id)}"><h3>${esc(profile.name)}</h3>
         <p>Preserved RMR source: ${profile.active ? 'Active' : 'Archived'}. Current profile status and editing are managed in ProspectIQ.</p>
         <p>${esc((profile.industries_json || []).join(', '))} · ${esc((profile.locations_json || []).join(' / '))}</p></article>`).join('')}
-      ${profiles.length ? '<p>These are preserved RMR source profiles. Profile import is a separate transition step; continue to ProspectIQ to view the profiles available there.</p>' : `<p>${summaryUnavailable ? 'The RMR source profile summary is temporarily unavailable.' : 'Create and manage your Target Profiles in ProspectIQ.'}</p>`}
+      ${profiles.length ? '<p>Initial profile preparation is complete. These preserved RMR records are historical source information, not the current PIQ profile list. PIQ edits and deletions are preserved; later RMR changes are not synchronized.</p>' : `<p>${summaryUnavailable ? 'The RMR source profile summary is temporarily unavailable.' : 'Create and manage your Target Profiles in ProspectIQ.'}</p>`}
       <button class="button" data-open-prospectiq>Open ProspectIQ</button>
     </section>`;
     const button = page.querySelector('[data-open-prospectiq]');

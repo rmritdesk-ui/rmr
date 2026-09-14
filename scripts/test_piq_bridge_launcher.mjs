@@ -23,6 +23,7 @@ test('bridge ON renders summary only and launches Leads',async()=>{
  const x=await setup(async(path,options)=>{
   requests.push([path,options]);
   if(path.includes('availability'))return {enabled:true,mapping_id:'mapping-a'};
+  if(path.endsWith('/profiles/bootstrap'))return {status:'completed'};
   if(path.endsWith('/launch'))return {launch_url:'https://piq.localhost/#rmr-start=test'};
   return {profiles:[{id:'source-a',name:'Original <profile>',active:true,industries_json:['Mortgage'],locations_json:['Phoenix']}]};
  });
@@ -39,7 +40,7 @@ test('tenant change during loading cannot display or launch another tenant',asyn
  assert.equal(await x.render(),true);assert.equal(x.page.innerHTML,'native sentinel');assert.equal(x.button.click,undefined);
 });
 test('profile-summary read failure still permits authorized launcher',async()=>{
- const x=await setup(async(path)=>{if(path.includes('availability'))return {enabled:true,mapping_id:'mapping-a'};throw Error('summary unavailable');});
+ const x=await setup(async(path)=>{if(path.includes('availability'))return {enabled:true,mapping_id:'mapping-a'};if(path.endsWith('/profiles/bootstrap'))return {status:'completed'};throw Error('summary unavailable');});
  assert.equal(await x.render(),true);assert.match(x.page.innerHTML,/summary is temporarily unavailable/);assert.match(x.page.innerHTML,/data-open-prospectiq/);
 });
 test('first use prepares only through POST then permits the existing launch',async()=>{
@@ -47,6 +48,7 @@ test('first use prepares only through POST then permits the existing launch',asy
  x=await setup(async(path,options)=>{
   requests.push([path,options]);
   if(path.includes('availability'))return {enabled:true,status:'unprovisioned',can_provision:true};
+  if(path.endsWith('/profiles/bootstrap'))return {status:'completed'};
   if(path.endsWith('/provision')){
    assert.match(x.page.innerHTML,/Preparing ProspectIQ/);
    assert.equal(options.method,'POST');assert.equal(options.body.tenant_id,'tenant-a');
@@ -66,6 +68,7 @@ test('read-only first user cannot start provisioning',async()=>{
 test('preparation failure hides infrastructure errors and offers retry without native fallback',async()=>{
  let ready=false;const x=await setup(async path=>{
   if(path.includes('availability'))return {enabled:true,status:'unprovisioned',can_provision:true};
+  if(path.endsWith('/profiles/bootstrap'))return {status:'completed'};
   if(path.endsWith('/provision')){if(!ready)throw Error('PRIVATE DATABASE DETAIL');return {status:'ready',mapping_id:'mapped'};}
   return {profiles:[]};
  });
@@ -78,4 +81,28 @@ test('tenant navigation during provisioning cannot publish stale mapping or laun
   x.state.selectedTenantId='tenant-b';return {status:'ready',mapping_id:'old-tenant'};
  });
  await x.render();assert.ok(!x.page.innerHTML.includes('Open ProspectIQ'));assert.equal(x.button.click,undefined);
+});
+test('bootstrap completes after provisioning and before launching; failure is actionable and retryable',async()=>{
+ let complete=false;const calls=[];
+ const x=await setup(async(path,options)=>{
+  calls.push(path);
+  if(path.includes('availability'))return {enabled:true,status:'unprovisioned',can_provision:true};
+  if(path.endsWith('/provision'))return {status:'ready',mapping_id:'mapped'};
+  if(path.endsWith('/profiles/bootstrap')){
+   assert.equal(options.method,'POST');assert.equal(options.body.tenant_id,'tenant-a');
+   if(!complete)throw Error('PRIVATE SQL ERROR');return {status:'completed'};
+  }
+  return {profiles:[]};
+ });
+ await x.render();assert.match(x.page.innerHTML,/Retry preparation/);assert.ok(!x.page.innerHTML.includes('PRIVATE'));
+ assert.ok(!x.page.innerHTML.includes('data-open-prospectiq'));
+ complete=true;await x.render();assert.match(x.page.innerHTML,/data-open-prospectiq/);
+ assert.ok(calls.findIndex(p=>p.endsWith('/provision'))<calls.findIndex(p=>p.endsWith('/profiles/bootstrap')));
+});
+test('tenant switch during bootstrap cannot render stale launcher',async()=>{
+ let x;x=await setup(async path=>{
+  if(path.includes('availability'))return {enabled:true,mapping_id:'mapped'};
+  x.state.selectedTenantId='tenant-b';return {status:'completed'};
+ });
+ await x.render();assert.ok(!x.page.innerHTML.includes('data-open-prospectiq'));
 });

@@ -7,27 +7,16 @@ import argparse
 import json
 import sqlite3
 import os
-from datetime import date, datetime
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from rmr_platform.prospectiq_bridge.profile_export import serialize_export
 
 def validate_issuer(issuer):
     url = urlsplit(issuer)
     if url.scheme != 'https' or not url.netloc or url.path not in ('', '/') or url.query or url.fragment or url.username:
         raise ValueError('An HTTPS issuer origin is required')
-
-def serialize_export(mappings, profiles, issuer):
-    if len(mappings) != 1:
-        raise ValueError('Exactly one active canonical mapping is required')
-    mapping = dict(mappings[0])
-    profiles = [dict(row) for row in profiles]
-    for profile in profiles:
-        for key in ('industries_json', 'locations_json', 'keywords_json', 'exclusions_json'):
-            if isinstance(profile[key], str): profile[key] = json.loads(profile[key])
-        for key, value in profile.items():
-            if isinstance(value, (date, datetime)): profile[key] = value.isoformat()
-    return {'version': 1, 'issuer': issuer.rstrip('/'), 'mapping': {key: mapping[key] for key in
-            ('id', 'tenant_id', 'piq_client_id', 'integration_instance_id', 'status')}, 'profiles': profiles}
 
 def export_profiles(database, tenant_id, instance, issuer):
     validate_issuer(issuer)
