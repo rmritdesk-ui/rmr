@@ -42,3 +42,40 @@ test('profile-summary read failure still permits authorized launcher',async()=>{
  const x=await setup(async(path)=>{if(path.includes('availability'))return {enabled:true,mapping_id:'mapping-a'};throw Error('summary unavailable');});
  assert.equal(await x.render(),true);assert.match(x.page.innerHTML,/summary is temporarily unavailable/);assert.match(x.page.innerHTML,/data-open-prospectiq/);
 });
+test('first use prepares only through POST then permits the existing launch',async()=>{
+ const requests=[];let x;
+ x=await setup(async(path,options)=>{
+  requests.push([path,options]);
+  if(path.includes('availability'))return {enabled:true,status:'unprovisioned',can_provision:true};
+  if(path.endsWith('/provision')){
+   assert.match(x.page.innerHTML,/Preparing ProspectIQ/);
+   assert.equal(options.method,'POST');assert.equal(options.body.tenant_id,'tenant-a');
+   return {status:'ready',mapping_id:'new-mapping'};
+  }
+  if(path.endsWith('/launch'))return {launch_url:'https://piq.localhost/#rmr-start=new'};
+  return {profiles:[]};
+ });
+ await x.render();assert.match(x.page.innerHTML,/Open ProspectIQ/);assert.ok(!x.page.innerHTML.includes('new-mapping'));
+ await x.button.click();assert.equal(requests.at(-1)[1].body.mapping_id,'new-mapping');
+ assert.equal(requests.filter(([p])=>p.endsWith('/provision')).length,1);
+});
+test('read-only first user cannot start provisioning',async()=>{
+ let count=0;const x=await setup(async()=>{count++;return {enabled:true,status:'unprovisioned',can_provision:false};});
+ await x.render();assert.equal(count,1);assert.match(x.page.innerHTML,/client administrator/);
+});
+test('preparation failure hides infrastructure errors and offers retry without native fallback',async()=>{
+ let ready=false;const x=await setup(async path=>{
+  if(path.includes('availability'))return {enabled:true,status:'unprovisioned',can_provision:true};
+  if(path.endsWith('/provision')){if(!ready)throw Error('PRIVATE DATABASE DETAIL');return {status:'ready',mapping_id:'mapped'};}
+  return {profiles:[]};
+ });
+ assert.equal(await x.render(),true);assert.match(x.page.innerHTML,/Retry preparation/);assert.ok(!x.page.innerHTML.includes('PRIVATE'));
+ ready=true;await x.render();assert.match(x.page.innerHTML,/Open ProspectIQ/);
+});
+test('tenant navigation during provisioning cannot publish stale mapping or launcher',async()=>{
+ let x;x=await setup(async path=>{
+  if(path.includes('availability'))return {enabled:true,status:'unprovisioned',can_provision:true};
+  x.state.selectedTenantId='tenant-b';return {status:'ready',mapping_id:'old-tenant'};
+ });
+ await x.render();assert.ok(!x.page.innerHTML.includes('Open ProspectIQ'));assert.equal(x.button.click,undefined);
+});

@@ -7,9 +7,28 @@ import {esc, toast} from '../ui.js';
 export async function renderProspectiqBridge(page, tenantId) {
   const current = () => state.selectedTenantId === tenantId && state.route === 'piq' && page.isConnected;
   try {
-    const availability = await api('/api/integrations/prospectiq/v1/availability?tenant_id=' + encodeURIComponent(tenantId));
+    let availability = await api('/api/integrations/prospectiq/v1/availability?tenant_id=' + encodeURIComponent(tenantId));
     if (!current()) return true;
     if (availability.enabled === false) return false;
+    if (availability.enabled === true && availability.status === 'unprovisioned') {
+      if (!availability.can_provision) {
+        page.innerHTML = '<section class="card" data-piq-bridge-unavailable><h1>ProspectIQ</h1><p>Ask a client administrator to prepare this workspace before continuing.</p></section>';
+        return true;
+      }
+      page.innerHTML = '<section class="card" data-piq-bridge-preparing><h1>ProspectIQ</h1><p role="status">Preparing ProspectIQ…</p></section>';
+      try {
+        const prepared = await api('/api/integrations/prospectiq/v1/provision', {method:'POST',body:{tenant_id:tenantId}});
+        if (!current()) return true;
+        if (prepared.status !== 'ready' || !prepared.mapping_id) throw new Error('Preparation incomplete');
+        availability = {enabled:true,mapping_id:prepared.mapping_id};
+      } catch {
+        if (current()) {
+          page.innerHTML = '<section class="card" data-piq-bridge-unavailable><h1>ProspectIQ</h1><p>ProspectIQ could not be prepared. Retry shortly or contact your administrator if the problem persists.</p><button class="button" data-retry-prospectiq>Retry preparation</button></section>';
+          page.querySelector('[data-retry-prospectiq]').addEventListener('click', () => { if (current()) renderProspectiqBridge(page,tenantId); });
+        }
+        return true;
+      }
+    }
     if (availability.enabled !== true || !availability.mapping_id) throw new Error('ProspectIQ mapping unavailable');
     let profiles = [];
     let summaryUnavailable = false;
@@ -24,7 +43,7 @@ export async function renderProspectiqBridge(page, tenantId) {
       ${profiles.map(profile => `<article class="notice-card" data-piq-source-profile="${esc(profile.id)}"><h3>${esc(profile.name)}</h3>
         <p>Preserved RMR source: ${profile.active ? 'Active' : 'Archived'}. Current profile status and editing are managed in ProspectIQ.</p>
         <p>${esc((profile.industries_json || []).join(', '))} · ${esc((profile.locations_json || []).join(' / '))}</p></article>`).join('')}
-      ${profiles.length ? '<p>Existing profiles are bootstrapped into the mapped PIQ workspace. Continue there to review drafts and complete required answers.</p>' : `<p>${summaryUnavailable ? 'The RMR source profile summary is temporarily unavailable.' : 'Create and manage your Target Profiles in ProspectIQ.'}</p>`}
+      ${profiles.length ? '<p>These are preserved RMR source profiles. Profile import is a separate transition step; continue to ProspectIQ to view the profiles available there.</p>' : `<p>${summaryUnavailable ? 'The RMR source profile summary is temporarily unavailable.' : 'Create and manage your Target Profiles in ProspectIQ.'}</p>`}
       <button class="button" data-open-prospectiq>Open ProspectIQ</button>
     </section>`;
     const button = page.querySelector('[data-open-prospectiq]');

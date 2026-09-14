@@ -13,6 +13,8 @@ from .contracts import LaunchRequest, LaunchResponse, AuthorizeRequest, Authoriz
 from .models import ProspectiqClientMapping as Mapping, ProspectiqAuthorizationGrant as Grant
 from . import service
 from . import crm
+from . import provisioning
+from .contracts import ProvisionRequest, ProvisionResponse
 from .contracts import CrmLeadRequest, CrmLeadResponse, ReceiptLookupRequest
 
 router = APIRouter(prefix="/api/integrations/prospectiq/v1", tags=["ProspectIQ federation"])
@@ -68,9 +70,20 @@ def availability(tenant_id: UUID, user=Depends(current_user), db: Session = Depe
         return {"enabled": False}
     cfg = bridge_config()
     row = db.scalar(select(Mapping).where(Mapping.tenant_id == str(tenant_id),
-                    Mapping.integration_instance_id == cfg.instance, Mapping.status == "active"))
+                    Mapping.integration_instance_id == cfg.instance))
+    if not row:
+        managed = service.authorized_tenant(db, user, str(tenant_id))
+        return {"enabled": True, "status": "unprovisioned", "can_provision":
+                "profiles.create" in service.capabilities_for(user, str(tenant_id), managed)}
     service.authorized(db, user, row, cfg)
-    return {"enabled": True, "mapping_id": row.id}
+    return {"enabled": True, "status": "ready", "mapping_id": row.id}
+
+
+@router.post("/provision", response_model=ProvisionResponse)
+def provision_workspace(payload: ProvisionRequest, request: Request, user=Depends(current_user),
+                        db: Session = Depends(get_db), cfg=Depends(bridge_config)):
+    result = provisioning.provision(db, user, str(payload.tenant_id), request, cfg)
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/launch", response_model=LaunchResponse)

@@ -33,6 +33,27 @@ class LaunchRequest(Versioned):
     destination: Destination
 
 
+class ProvisionRequest(Versioned):
+    tenant_id: UUID
+
+
+class ProvisionResponse(Versioned):
+    mapping_id: UUID
+    status: Literal["ready"] = "ready"
+
+
+class WorkspaceRequest(Versioned):
+    rmr_tenant_id: UUID
+    tenant_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+
+
+class WorkspaceResponse(Versioned):
+    issuer: Text120
+    integration_instance_id: Text120
+    rmr_tenant_id: UUID
+    piq_client_id: UUID
+
+
 class LaunchResponse(Versioned):
     transaction_id: UUID
     expires_at: Positive  # UTC Unix seconds

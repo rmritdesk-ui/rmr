@@ -38,24 +38,31 @@ def authorized(db, user, mapping, cfg, managed_id=None):
         raise HTTPException(403, "Bridge user unavailable")
     if not mapping or mapping.status != "active" or mapping.integration_instance_id != cfg.instance:
         raise HTTPException(403, "Active ProspectIQ mapping required")
-    if not db.get(Tenant, mapping.tenant_id):
+    return authorized_tenant(db, user, mapping.tenant_id, managed_id)
+
+
+def authorized_tenant(db, user, tenant_id, managed_id=None):
+    """Existing tenant authority, also usable before a client mapping exists."""
+    if not user or not user.active or user.must_change_password:
+        raise HTTPException(403, "Bridge user unavailable")
+    if not db.get(Tenant, tenant_id):
         raise HTTPException(403, "Tenant unavailable")
-    require_tenant_access(user, mapping.tenant_id)
+    require_tenant_access(user, tenant_id)
     managed = None
     if is_global_admin(user):
         managed_ref = managed_id or getattr(user, "_managed_session_id", None)
         managed = db.get(ManagedTenantSession, managed_ref) if managed_ref else None
-        if managed_ref and (not managed or managed.admin_user_id != user.id or managed.tenant_id != mapping.tenant_id
+        if managed_ref and (not managed or managed.admin_user_id != user.id or managed.tenant_id != tenant_id
                 or managed.status != "active" or managed.access_type != "managed_write"
                 or aware(managed.expires_at) <= utcnow()):
             raise HTTPException(403, "Active managed workspace session required")
         if managed:
             user._managed_tenant_id = managed.tenant_id
             user._managed_access_type = managed.access_type
-            require_client_operational_write(user, mapping.tenant_id)
+            require_client_operational_write(user, tenant_id)
     elif user.tenant_role not in CLIENT_ROLES:
         raise HTTPException(403, "Tenant role required")
-    _require_piq_access(db, mapping.tenant_id)
+    _require_piq_access(db, tenant_id)
     return managed
 
 
