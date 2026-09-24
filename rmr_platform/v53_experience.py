@@ -491,6 +491,10 @@ def update_contact(contact_id: str, payload: ContactUpdateIn, request: Request,
 
 
 class LeadUpdateIn(BaseModel):
+    company_name: str | None = Field(default=None, max_length=200)
+    contact_name: str | None = Field(default=None, max_length=160)
+    email: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=80)
     status: str | None = Field(default=None, max_length=40)
     notes: str | None = Field(default=None, max_length=5000)
     assigned_user_id: str | None = None

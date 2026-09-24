@@ -49,18 +49,25 @@ def tick():
             try:
                 message=db.get(m.CB1Message,job.message_id); campaign=db.get(m.CB1Campaign,job.campaign_id)
                 if not message or not campaign or campaign.status not in {'ACTIVE','RUNNING'}: job.status='STOPPED'; job.last_error='Campaign inactive or message missing.'; continue
+                conn=db.get(m.CB1ProviderConnection,campaign.provider_connection_id) if campaign.provider_connection_id else None
+                if (not conn or conn.tenant_id != job.tenant_id
+                        or campaign.tenant_id != job.tenant_id or message.tenant_id != job.tenant_id
+                        or message.campaign_id != campaign.id):
+                    job.status='FAILED'; job.last_error='Sending connection or campaign does not belong to this client.'; job.updated_at=now
+                    continue
                 if message.status not in {'APPROVED','SCHEDULED'}: job.status='STOPPED'; job.last_error='Message not approved.'; continue
                 suppressed=db.scalar(select(m.CB1Suppression).where(m.CB1Suppression.tenant_id==message.tenant_id,m.CB1Suppression.email==message.recipient_email.lower()))
                 if suppressed: message.status='SUPPRESSED'; message.stop_reason=suppressed.reason; job.status='STOPPED'; continue
                 recent=db.scalar(select(m.CB1Message).where(m.CB1Message.tenant_id==message.tenant_id,m.CB1Message.recipient_email==message.recipient_email,m.CB1Message.sent_at>=now-timedelta(hours=campaign.frequency_hours),m.CB1Message.id!=message.id))
                 if recent: job.due_at=recent.sent_at+timedelta(hours=campaign.frequency_hours); job.last_error='Frequency cap deferred send.'; continue
-                conn=db.get(m.CB1ProviderConnection,campaign.provider_connection_id)
-                if not conn or conn.status!='ACTIVE': job.last_error='Provider connection is not active.'; job.attempts+=1; job.due_at=now+timedelta(minutes=15); continue
+                if conn.status!='ACTIVE': job.last_error='Provider connection is not active.'; job.attempts+=1; job.due_at=now+timedelta(minutes=15); continue
                 provider_id=_send(conn,message); message.provider_message_id=provider_id; message.sent_at=now; message.status='SENT'; job.status='COMPLETE'; job.updated_at=now
                 db.add(m.CB1AuditEvent(tenant_id=message.tenant_id,event_type='EMAIL_SENT',object_type='message',object_id=message.id,detail_json=dumps({'crm_record_id':message.crm_record_id,'piq_record_id':message.piq_record_id,'recipient':message.recipient_email})))
             except Exception as exc:
                 job.attempts+=1; job.last_error=str(exc); job.due_at=now+timedelta(minutes=min(60,5*max(1,job.attempts))); job.status='FAILED' if job.attempts>=5 else 'QUEUED'
-            db.commit()
+            finally:
+                # Persist safe-stop and deferral branches as well as successful sends.
+                db.commit()
     finally: db.close()
 
 def _loop():

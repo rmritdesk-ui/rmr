@@ -35,6 +35,12 @@ def tenant_allowed(db,user,tenant_id):
 def require_tenant(db,user,tenant_id):
     if not tenant_allowed(db,user,tenant_id): raise HTTPException(403,'Tenant access denied.')
 
+def require_campaign_sender(db, tenant_id, connection_id):
+    connection = db.get(m.CB1ProviderConnection, connection_id) if connection_id else None
+    if not connection or connection.tenant_id != tenant_id:
+        raise HTTPException(400, 'Select a sending connection belonging to this client.')
+    return connection
+
 def public_user(user):
     return {'id':user_id(user),'email':user_email(user),'name':str(getattr(user,'full_name',getattr(user,'name',''))),'role':role_of(user)}
 
@@ -371,7 +377,9 @@ def build_router(auth_dependency):
 
     @router.post('/api/cb1/tenants/{tenant_id}/campaigns')
     async def campaign_create(tenant_id:str,payload:CampaignIn,request:Request,user=Depends(auth_dependency),db=Depends(db_dep)):
-        require_tenant(db,user,tenant_id); row=m.CB1Campaign(tenant_id=tenant_id,name=payload.name,status='ACTIVE',provider_connection_id=payload.provider_connection_id,frequency_hours=max(1,payload.frequency_hours),created_by=user_id(user)); db.add(row); audit(db,user,'CAMPAIGN_CREATED',tenant_id,'campaign',row.id,{},request); db.commit(); return {'campaign':json_row(row)}
+        require_tenant(db,user,tenant_id)
+        require_campaign_sender(db,tenant_id,payload.provider_connection_id)
+        row=m.CB1Campaign(tenant_id=tenant_id,name=payload.name,status='ACTIVE',provider_connection_id=payload.provider_connection_id,frequency_hours=max(1,payload.frequency_hours),created_by=user_id(user)); db.add(row); audit(db,user,'CAMPAIGN_CREATED',tenant_id,'campaign',row.id,{},request); db.commit(); return {'campaign':json_row(row)}
 
     @router.post('/api/cb1/campaigns/{campaign_id}/{action}')
     async def campaign_action(campaign_id:str,action:str,request:Request,user=Depends(auth_dependency),db=Depends(db_dep)):
@@ -411,6 +419,10 @@ def build_router(auth_dependency):
         row=db.get(m.CB1Message,message_id)
         if not row: raise HTTPException(404,'Message not found.')
         require_tenant(db,user,row.tenant_id)
+        campaign = db.get(m.CB1Campaign, row.campaign_id) if row.campaign_id else None
+        if not campaign or campaign.tenant_id != row.tenant_id:
+            raise HTTPException(400, 'Select a campaign belonging to this client.')
+        require_campaign_sender(db,row.tenant_id,campaign.provider_connection_id)
         if row.status!='APPROVED' or not row.body_approved or row.approved_hash!=sha(row.body_approved): raise HTTPException(409,'Only the exact approved message can be scheduled.')
         when=payload.scheduled_at if payload.scheduled_at.tzinfo else payload.scheduled_at.replace(tzinfo=timezone.utc); row.scheduled_at=when; row.status='SCHEDULED'; job=m.CB1DripJob(tenant_id=row.tenant_id,campaign_id=row.campaign_id,message_id=row.id,status='QUEUED',due_at=when); db.add(job); audit(db,user,'MESSAGE_SCHEDULED',row.tenant_id,'message',row.id,{'scheduled_at':when.isoformat()},request); db.commit(); return {'message':json_row(row),'job':json_row(job)}
 

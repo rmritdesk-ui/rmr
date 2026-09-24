@@ -136,6 +136,7 @@ async function openCrmRecord(type,id,ctx){
         if(action==='mark-lost'){close();quickCloseOpportunityModal(r,'Closed Lost',ctx)}
         if(action==='convert') convertLeadModal(r,ctx,close);
         if(action==='edit-contact') editContactModal(r,ctx,close);
+        if(action==='edit-lead') editLeadModal(r,ctx,close);
       }));
       $$('[data-open-message]',root).forEach(btn=>btn.addEventListener('click',()=>openMessageDetail(btn.dataset.openMessage)));
     }});
@@ -148,7 +149,7 @@ function recordDetailBody(data){
   const isClosed=type==='opportunity'&&['Closed Won','Closed Lost'].includes(r.stage);
   const closeActions=type==='opportunity'&&!isClosed?'<button class="button v531-win" data-record-action="mark-won">Mark Won</button><button class="button secondary v531-loss" data-record-action="mark-lost">Mark Lost</button>':'';
   const finalStatus=isClosed?`<div class="v531-final-status ${r.stage==='Closed Won'?'won':'lost'}"><strong>${esc(r.stage)}</strong><span>${r.stage==='Closed Won'?cents(r.value_cents):esc(r.loss_reason||'Opportunity closed without a win.')}</span></div>`:'';
-  const actions=`<div class="v53-detail-actions">${closeActions}${(r.email||r.contact_email)?'<button class="button" data-record-action="email">Email</button>':''}<button class="button secondary" data-record-action="activity">Add Activity</button>${type==='opportunity'?'<button class="button secondary" data-record-action="edit-opportunity">Edit Opportunity</button>':''}${type==='lead'&&r.status!=='Converted'?'<button class="button secondary" data-record-action="convert">Convert Lead</button>':''}${type==='contact'?'<button class="button secondary" data-record-action="edit-contact">Edit Contact</button>':''}</div>`;
+  const actions=`<div class="v53-detail-actions">${closeActions}${(r.email||r.contact_email)?'<button class="button" data-record-action="email">Email</button>':''}<button class="button secondary" data-record-action="activity">Add Activity</button>${type==='opportunity'?'<button class="button secondary" data-record-action="edit-opportunity">Edit Opportunity</button>':''}${type==='lead'?'<button class="button secondary" data-record-action="edit-lead">Edit Lead</button>':''}${type==='lead'&&r.status!=='Converted'?'<button class="button secondary" data-record-action="convert">Convert Lead</button>':''}${type==='contact'?'<button class="button secondary" data-record-action="edit-contact">Edit Contact</button>':''}</div>`;
   const piq=data.piq?`<section class="v53-detail-section v53-intelligence"><header><div><span class="v53-eyebrow">PROSPECTIQ INTELLIGENCE</span><h3>${esc(data.piq.company_name)}</h3></div><strong>${data.piq.score}/100</strong></header><p>${esc(data.piq.signal||'')}</p><div class="v53-evidence-list">${(data.piq.evidence||[]).map(e=>`<div><span>${esc(e.evidence_type)}</span><strong>${esc(e.fact)}</strong><small>${esc(e.source_name)} · ${e.confidence_pct}% confidence</small></div>`).join('')||'<small>No evidence details available.</small>'}</div></section>`:'';
   const related=renderRelated(data.related,type);
   const activities=`<section class="v53-detail-section"><header><h3>Activity Timeline</h3><span>${data.activities.length}</span></header><div class="v53-timeline compact">${data.activities.map(a=>`<article class="v53-timeline-item"><span class="v53-timeline-icon">${activityIcon(a.activity_type)}</span><div><strong>${esc(a.subject||title(a.activity_type))}</strong><small>${fmtDateTime(a.created_at)}</small><p>${esc(a.body||'')}</p></div></article>`).join('')||empty('No activity yet','Add a note, task, email or follow-up.')}</div></section>`;
@@ -164,6 +165,20 @@ function quickCloseOpportunityModal(row,stage,ctx){
 
 function recordFacts(type,r){const facts=[];if(type==='opportunity')facts.push(['Account',r.account_name],['Contact',r.contact_name],['Owner',r.owner_name],['Source',r.source],['Probability',`${r.probability_pct}%`],['Expected close',fmtDate(r.expected_close_date)],['Next action',r.next_action||'Not set']);else if(type==='lead')facts.push(['Company',r.company_name||'Individual'],['Email',r.email],['Phone',r.phone],['Source',r.source],['Status',r.status],['Assigned to',r.assigned_name],['Notes',r.notes]);else if(type==='contact')facts.push(['Account',r.account_name],['Email',r.email],['Phone',r.phone],['Title',r.title],['Primary contact',r.primary_contact?'Yes':'No']);else facts.push(['Status',r.status],['Owner',r.owner_name],['Team',r.team_name],['Source',r.source],['Risk',r.risk],['Notes',r.notes]);return `<dl class="v53-facts">${facts.filter(x=>x[1]!==undefined&&x[1]!==null&&x[1]!=='').map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`}
 function renderRelated(related,type){if(!related||!Object.keys(related).length)return `<section class="v53-detail-section"><h3>Related Records</h3>${empty('No related records','Relationships will appear as this record progresses.')}</section>`;const rows=[];if(related.account)rows.push(`<div><span>Account</span><strong>${esc(related.account.name)}</strong></div>`);if(related.contact)rows.push(`<div><span>Contact</span><strong>${esc(`${related.contact.first_name} ${related.contact.last_name}`.trim())}</strong></div>`);(related.contacts||[]).forEach(x=>rows.push(`<div><span>Contact</span><strong>${esc(`${x.first_name} ${x.last_name}`.trim())}</strong></div>`));(related.opportunities||[]).forEach(x=>rows.push(`<div><span>Opportunity</span><strong>${esc(x.name)} · ${cents(x.value_cents)}</strong></div>`));return `<section class="v53-detail-section"><h3>Related Records</h3><div class="v53-related-list">${rows.join('')||empty('No related records','Relationships will appear here.')}</div></section>`}
+
+function editLeadModal(row,ctx,parentClose){
+  const fields=[['company_name','Company name',200],['contact_name','Contact name',160],['email','Email',255],['phone','Phone',80]];
+  modal({title:'Edit Lead',body:`<form id="v53-lead-form" class="form-grid">${fields.map(([name,label,max])=>`<div class="field"><label>${label}</label><input name="${name}" type="${name==='email'?'email':'text'}" maxlength="${max}" value="${esc(row[name]||'')}"></div>`).join('')}</form>`,
+    footer:'<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-save-lead">Save Lead</button>',
+    onOpen:(root,close)=>$('#v53-save-lead',root).addEventListener('click',async()=>{
+      const form=$('#v53-lead-form',root);
+      if(!form.reportValidity())return;
+      try{
+        await api(`/api/v53/leads/${row.id}`,{method:'PATCH',body:Object.fromEntries(fields.map(([name])=>[name,form.elements.namedItem(name).value]))});
+        toast('Lead updated');close();parentClose?.();ctx.navigate('crm?tab=leads');
+      }catch(e){toast(e.message,'error')}
+    })});
+}
 
 function convertLeadModal(lead,ctx,parentClose=null){
   const defaultAccount=lead.company_name||lead.contact_name||'Converted Lead';
