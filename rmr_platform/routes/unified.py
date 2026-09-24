@@ -146,6 +146,10 @@ class ImportRowsIn(BaseModel):
     rows: list[dict[str, Any]] = Field(default_factory=list)
     batch_id: str | None = None
 
+class CrmImportRowsIn(ImportRowsIn):
+    filename: str = Field(default="pasted-list.csv", max_length=255)
+    rows: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+
 
 class MergeIn(BaseModel):
     keep_id: str
@@ -591,29 +595,56 @@ def merge_accounts(tenant_id: str, payload: MergeIn, request: Request, user: Use
 
 
 @router.post("/tenants/{tenant_id}/crm/import-preview")
-def crm_import_preview(tenant_id: str,payload:ImportRowsIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
+def crm_import_preview(tenant_id: str,payload:CrmImportRowsIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
     require_request_origin(request);require_client_operational_write(user,tenant_id)
-    existing_accounts={x.lower() for x in db.scalars(select(Account.name).where(Account.tenant_id==tenant_id))};existing_emails={x.lower() for x in db.scalars(select(Lead.email).where(Lead.tenant_id==tenant_id,Lead.email!=""))}
+    return _crm_import_preview(db, tenant_id, payload.rows)
+
+
+def _crm_import_preview(db: Session, tenant_id: str, rows: list[dict[str, Any]]) -> dict:
+    # Syntax-only validation: import must never need DNS or an external service.
+    email_pattern = r"[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+"
+    normalize = lambda value: str(value or "").strip().casefold()
+    existing_accounts = {normalize(x) for x in db.scalars(select(Account.name).where(Account.tenant_id == tenant_id))}
+    existing_leads = list(db.execute(select(Lead.company_name, Lead.contact_name, Lead.email).where(Lead.tenant_id == tenant_id)))
+    existing_emails = {normalize(x.email) for x in existing_leads if x.email}
+    existing_emails.update(normalize(x) for x in db.scalars(select(Contact.email).where(Contact.tenant_id == tenant_id, Contact.email != "")))
+    existing_names = {(normalize(x.company_name), normalize(x.contact_name)) for x in existing_leads}
+    seen_emails, seen_names = set(), set()
     preview=[]
-    for i,row in enumerate(payload.rows,1):
-        company=str(row.get("company_name") or row.get("company") or "").strip();email=str(row.get("email") or "").strip().lower();kind=str(row.get("type") or "lead").lower()
+    for i,row in enumerate(rows,1):
+        company=str(row.get("company_name") or row.get("company") or "").strip()
+        contact=str(row.get("contact_name") or "").strip()
+        email=str(row.get("email") or "").strip().lower()
+        phone=str(row.get("phone") or "").strip()
+        source=str(row.get("source") or "Imported List").strip()
         errors=[]
         if not company:errors.append("Company is required")
-        duplicate=company.lower() in existing_accounts or (email and email in existing_emails)
-        preview.append({"row":i,"status":"error" if errors else "duplicate" if duplicate else "ready","type":kind,"company_name":company,"contact_name":str(row.get("contact_name") or ""),"email":email,"phone":str(row.get("phone") or ""),"source":str(row.get("source") or "Imported List"),"errors":errors})
+        if email and not re.fullmatch(email_pattern,email): errors.append("Enter a valid email address")
+        for label,value,limit in [("Company",company,200),("Contact name",contact,160),("Email",email,255),("Phone",phone,80),("Source",source,80)]:
+            if len(value)>limit: errors.append(f"{label} exceeds {limit} characters")
+        key=(normalize(company),normalize(contact))
+        reason=""
+        if not errors:
+            if normalize(company) in existing_accounts or (email and email in existing_emails) or (not email and key in existing_names):
+                reason="Already in this client's CRM"
+            elif (email and email in seen_emails) or (not email and key in seen_names):
+                reason="Duplicate within this import"
+            if not reason:
+                if email: seen_emails.add(email)
+                seen_names.add(key)
+        preview.append({"row":i,"status":"error" if errors else "duplicate" if reason else "ready","type":"lead","company_name":company,"contact_name":contact,"email":email,"phone":phone,"source":source,"errors":errors,"duplicate_reason":reason})
     return {"preview":preview,"ready":sum(1 for x in preview if x["status"]=="ready"),"duplicates":sum(1 for x in preview if x["status"]=="duplicate"),"errors":sum(1 for x in preview if x["status"]=="error")}
 
 
 @router.post("/tenants/{tenant_id}/crm/import")
-def crm_import(tenant_id: str,payload:ImportRowsIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
+def crm_import(tenant_id: str,payload:CrmImportRowsIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
     require_request_origin(request);require_client_operational_write(user,tenant_id);created=0
-    for row in payload.rows:
-        if row.get("status") not in {None,"ready"}:continue
-        company=str(row.get("company_name") or row.get("company") or "").strip();email=str(row.get("email") or "").strip().lower()
-        if not company:continue
-        if db.scalar(select(Account).where(Account.tenant_id==tenant_id,func.lower(Account.name)==company.lower())) or (email and db.scalar(select(Lead).where(Lead.tenant_id==tenant_id,func.lower(Lead.email)==email))):continue
-        db.add(Lead(tenant_id=tenant_id,company_name=company,contact_name=str(row.get("contact_name") or ""),email=email,phone=str(row.get("phone") or ""),source=str(row.get("source") or "Imported List"),status="New",assigned_user_id=user.id));created+=1
-    audit(db,user,"crm.import.completed",tenant_id=tenant_id,entity_type="lead",data={"created":created,"filename":payload.filename});db.commit();return {"created":created}
+    result = _crm_import_preview(db, tenant_id, payload.rows)
+    for row in result["preview"]:
+        if row["status"] != "ready": continue
+        db.add(Lead(tenant_id=tenant_id,company_name=row["company_name"],contact_name=row["contact_name"],email=row["email"],phone=row["phone"],source=row["source"],status="New",assigned_user_id=user.id));created+=1
+    audit(db,user,"crm.import.completed",tenant_id=tenant_id,entity_type="lead",data={"created":created,"filename":payload.filename});db.commit()
+    return {"created":created,"duplicates":result["duplicates"],"errors":result["errors"],"skipped":result["duplicates"]+result["errors"]}
 
 
 @router.get("/tenants/{tenant_id}/email-status")

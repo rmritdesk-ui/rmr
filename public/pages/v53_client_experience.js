@@ -1,4 +1,5 @@
 import {api} from '../api.js';
+import {openCrmImport} from './crm_import.js';
 import {renderProspectiqBridge} from './prospectiq_bridge_ui.js';
 import {loadWorkflow, bindWorkflow, profileModal, applyResearchState, researchMessage, researchDetails} from './piq_workflow_ui.js';
 import {startResearch, restoreResearch} from './piq_research_ui.js';
@@ -81,7 +82,7 @@ async function crm(page,ctx){
   $$('[data-crm-tab]').forEach(btn=>btn.addEventListener('click',()=>ctx.navigate(`crm?tab=${btn.dataset.crmTab}`)));
   $('#v53-crm-search').addEventListener('input',e=>filterCrmRows(e.target.value));
   $('#v53-crm-new').addEventListener('click',()=>newCrmRecordModal(tab,data,ctx));
-  $('#v53-crm-import').addEventListener('click',()=>simpleInfoModal('CRM Import','Use the existing preview-and-commit import workflow. Upload a clean CSV in the Product Owner test environment and confirm duplicates before committing.'));
+  $('#v53-crm-import').addEventListener('click',()=>openCrmImport(ctx));
   $('#v53-crm-duplicates').addEventListener('click',()=>duplicatesModal(ctx));
   bindCrmRecordActions(data,ctx);
   if(query.lead) {
