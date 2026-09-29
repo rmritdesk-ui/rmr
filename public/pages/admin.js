@@ -110,24 +110,220 @@ function showClientCreated(result,ctx){
 
 async function client360(page,ctx){
   const tenant=selectedTenant();
-  if(!tenant){page.innerHTML=empty('Select a client','Choose a client from the selector or Portfolio Command Center.');return;}
-  const [data,themeData]=await Promise.all([api(`/api/tenants/${tenant.id}/client360`),api(`/api/tenants/${tenant.id}/theme`)]);
-  const t=data.tenant,m=data.metrics,f=data.financials,a=data.access,o=data.onboarding,w=data.website;
-  const crumbs=breadcrumb([{label:'Portfolio',route:'portfolio'},{label:t.name}]);
-  page.innerHTML=`${pageHead(`${esc(t.name)} — Client 360`,'RMR and Step2 relationship, adoption, services, access, and authorized support view.',`<button class="button secondary" data-route="portfolio">Return to Portfolio</button><button class="button secondary" id="edit-client">Edit Client Details</button><button class="button secondary" id="manage-access">Manage Client Access</button><button class="button secondary" id="manage-tenant-theme">Manage Branding</button><button class="button" id="open-client-workspace">Open Client Workspace</button>`,crumbs)}
-  <section class="hero-card"><div><div class="eyebrow">CLIENT RELATIONSHIP</div><h2>${esc(t.name)}</h2><p>${esc(t.industry)} · ${esc(t.country)} · ${esc(websiteMode(t.website_mode))}</p></div><div class="hero-stat"><span>Client status</span><strong>${esc(t.status)}</strong><small>${esc(t.health_status)}</small></div></section>
-  <div class="kpi-grid">${kpi(acronym('MRR'),money(f.mrr_cents),'Contracted monthly services')}${kpi('Usage revenue',money(f.usage_revenue_cents),'Current period')}${kpi('Adoption',m.adoption_state==='measured'?pct(m.adoption_score):'Not measured',m.adoption_state==='measured'?'Platform activity':'Begins after client activity')}${kpi('Training',m.training_state==='measured'?pct(m.training_completion_pct):'Not assigned',m.training_state==='measured'?'Assigned learning':'No required training assigned')}${kpi('Client access',accessLabel(a.access_state),a.active_client_admins.length?`${a.active_client_admins.length} active administrator(s)`:a.pending_invitation?'Invitation pending':'No client user')}${kpi('Onboarding',pct(o?.project?.readiness_pct||0),`${o?.completed_steps||0} of ${o?.total_steps||0} stages`)}</div>
-  <div class="grid two"><section class="card"><h2>RMR relationship actions</h2><div class="action-grid"><button class="action-card" data-route="pricing"><strong>Client Pricing</strong><span>Services, rates, and billing schedule</span></button><button class="action-card" data-route="onboarding"><strong>Client Onboarding</strong><span>Setup stages and client access</span></button><button class="action-card" data-route="crm"><strong>Client Operations — Read Only</strong><span>Review CRM and activity for support</span></button><button class="action-card" data-route="website"><strong>Website Management</strong><span>Configuration and content</span></button></div></section>
-  <section class="card"><h2>Website & platform</h2><div class="list-item"><span class="grow"><strong>${esc(websiteMode(w.mode||t.website_mode))}</strong><small class="muted">${w.configured?'Website is configured':'Website URL is not configured'}</small></span>${w.configured?`<button class="button secondary small" id="open-website">View website</button>`:badge('Needs setup','amber')}</div><div class="list-item"><span class="grow"><strong>Primary contact</strong><small class="muted">${esc(t.primary_contact_name||'Not set')} · ${esc(t.primary_contact_email||'')}</small></span></div>${themeSummaryCard(themeData,{buttonId:'manage-tenant-theme-card',compact:true})}</section></div>
-  <div class="grid two"><section class="card"><h2>Active services</h2><div class="grid">${data.services.length?data.services.map(s=>`<div class="list-item"><span class="grow"><strong>${esc(s.catalog.name)}</strong><small class="muted">${money(s.tenant_service.contract_price_cents)} · ${esc(s.tenant_service.cadence)}</small></span>${badge(s.tenant_service.status,statusTone(s.tenant_service.status))}</div>`).join(''):empty('No services','Add services under Client Pricing.')}</div></section><section class="card"><h2>Client value evidence</h2><div class="grid two">${kpi('CRM accounts',number(m.accounts),m.accounts?'Client-owned records':'No records yet')}${kpi('Open opportunities',number(m.opportunities),m.opportunities?'Client pipeline':'No opportunities yet')}${kpi('Leads',number(m.leads),m.leads?'Client lead flow':'No leads yet')}${kpi('Forecast use',m.forecast_used?'Active':'Not started',m.forecast_used?`Accuracy ${pct(m.forecast_accuracy_pct)}`:'No forecast created')}</div><p class="tiny muted">Operational values are client-owned and read-only to RMR/Step2.</p></section></div>`;
+  if(!tenant){
+    page.innerHTML=empty('Select a client','Choose a client from the selector or Portfolio Command Center.');
+    return;
+  }
+
+  const [data,themeData]=await Promise.all([
+    api(`/api/tenants/${tenant.id}/client360`),
+    api(`/api/tenants/${tenant.id}/theme`)
+  ]);
+
+  const t=data.tenant,
+        m=data.metrics,
+        f=data.financials,
+        a=data.access,
+        o=data.onboarding,
+        w=data.website;
+
+  const crumbs=breadcrumb([
+    {label:'Portfolio',route:'portfolio'},
+    {label:t.name}
+  ]);
+
+  page.innerHTML=`${pageHead(
+    `${esc(t.name)} — Client 360`,
+    'RMR and Step2 relationship, adoption, services, access, and authorized support view.',
+    `<button class="button secondary" data-route="portfolio">Return to Portfolio</button>
+     <button class="button secondary" id="edit-client">Edit Client Details</button>
+     <button class="button secondary" id="manage-access">Manage Client Access</button>
+     <button class="button secondary" id="manage-tenant-theme">Manage Branding</button>
+     <button class="button secondary" id="connected-email">Connected Email</button>
+     <button class="button" id="open-client-workspace">Open Client Workspace</button>`,
+    crumbs
+  )}
+
+  <section class="hero-card">
+    <div>
+      <div class="eyebrow">CLIENT RELATIONSHIP</div>
+      <h2>${esc(t.name)}</h2>
+      <p>${esc(t.industry)} · ${esc(t.country)} · ${esc(websiteMode(t.website_mode))}</p>
+    </div>
+    <div class="hero-stat">
+      <span>Client status</span>
+      <strong>${esc(t.status)}</strong>
+      <small>${esc(t.health_status)}</small>
+    </div>
+  </section>
+
+  <div class="kpi-grid">
+    ${kpi(acronym('MRR'),money(f.mrr_cents),'Contracted monthly services')}
+    ${kpi('Usage revenue',money(f.usage_revenue_cents),'Current period')}
+    ${kpi(
+      'Adoption',
+      m.adoption_state==='measured'?pct(m.adoption_score):'Not measured',
+      m.adoption_state==='measured'?'Platform activity':'Begins after client activity'
+    )}
+    ${kpi(
+      'Training',
+      m.training_state==='measured'?pct(m.training_completion_pct):'Not assigned',
+      m.training_state==='measured'?'Assigned learning':'No required training assigned'
+    )}
+    ${kpi(
+      'Client access',
+      accessLabel(a.access_state),
+      a.active_client_admins.length
+        ? `${a.active_client_admins.length} active administrator(s)`
+        : a.pending_invitation
+          ? 'Invitation pending'
+          : 'No client user'
+    )}
+    ${kpi(
+      'Onboarding',
+      pct(o?.project?.readiness_pct||0),
+      `${o?.completed_steps||0} of ${o?.total_steps||0} stages`
+    )}
+  </div>
+
+  <div class="grid two">
+    <section class="card">
+      <h2>RMR relationship actions</h2>
+      <div class="action-grid">
+        <button class="action-card" data-route="pricing">
+          <strong>Client Pricing</strong>
+          <span>Services, rates, and billing schedule</span>
+        </button>
+
+        <button class="action-card" data-route="onboarding">
+          <strong>Client Onboarding</strong>
+          <span>Setup stages and client access</span>
+        </button>
+
+        <button class="action-card" data-route="crm">
+          <strong>Client Operations — Read Only</strong>
+          <span>Review CRM and activity for support</span>
+        </button>
+
+        <button class="action-card" data-route="website">
+          <strong>Website Management</strong>
+          <span>Configuration and content</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Website & platform</h2>
+
+      <div class="list-item">
+        <span class="grow">
+          <strong>${esc(websiteMode(w.mode||t.website_mode))}</strong>
+          <small class="muted">${w.configured?'Website is configured':'Website URL is not configured'}</small>
+        </span>
+        ${
+          w.configured
+            ? `<button class="button secondary small" id="open-website">View website</button>`
+            : badge('Needs setup','amber')
+        }
+      </div>
+
+      <div class="list-item">
+        <span class="grow">
+          <strong>Primary contact</strong>
+          <small class="muted">${esc(t.primary_contact_name||'Not set')} · ${esc(t.primary_contact_email||'')}</small>
+        </span>
+      </div>
+
+      ${themeSummaryCard(themeData,{
+        buttonId:'manage-tenant-theme-card',
+        compact:true
+      })}
+    </section>
+  </div>
+
+  <div class="grid two">
+    <section class="card">
+      <h2>Active services</h2>
+      <div class="grid">
+        ${
+          data.services.length
+            ? data.services.map(s=>`
+                <div class="list-item">
+                  <span class="grow">
+                    <strong>${esc(s.catalog.name)}</strong>
+                    <small class="muted">
+                      ${money(s.tenant_service.contract_price_cents)} ·
+                      ${esc(s.tenant_service.cadence)}
+                    </small>
+                  </span>
+                  ${badge(
+                    s.tenant_service.status,
+                    statusTone(s.tenant_service.status)
+                  )}
+                </div>
+              `).join('')
+            : empty('No services','Add services under Client Pricing.')
+        }
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Client value evidence</h2>
+
+      <div class="grid two">
+        ${kpi('CRM accounts',number(m.accounts),m.accounts?'Client-owned records':'No records yet')}
+        ${kpi('Open opportunities',number(m.opportunities),m.opportunities?'Client pipeline':'No opportunities yet')}
+        ${kpi('Leads',number(m.leads),m.leads?'Client lead flow':'No leads yet')}
+        ${kpi(
+          'Forecast use',
+          m.forecast_used?'Active':'Not started',
+          m.forecast_used
+            ? `Accuracy ${pct(m.forecast_accuracy_pct)}`
+            : 'No forecast created'
+        )}
+      </div>
+
+      <p class="tiny muted">
+        Operational values are client-owned and read-only to RMR/Step2.
+      </p>
+    </section>
+  </div>`;
+
   bindBreadcrumbs(ctx.navigate);
-  $$('[data-route]').forEach(btn=>btn.addEventListener('click',()=>ctx.navigate(btn.dataset.route)));
-  $('#edit-client').addEventListener('click',()=>editClientModal(t,ctx));
-  $('#manage-access').addEventListener('click',()=>clientAccessModal(t,ctx));
-  $('#manage-tenant-theme').addEventListener('click',()=>openThemeManager(t.id,ctx,{title:'Tenant Branding'}));
-  $('#manage-tenant-theme-card')?.addEventListener('click',()=>openThemeManager(t.id,ctx,{title:'Tenant Branding'}));
-  $('#open-client-workspace').addEventListener('click',()=>ctx.enterClientWorkspace(t.id));
-  $('#open-website')?.addEventListener('click',()=>window.open(w.open_url,'_blank','noopener'));
+
+  $$('[data-route]').forEach(btn=>
+    btn.addEventListener('click',()=>ctx.navigate(btn.dataset.route))
+  );
+
+  $('#edit-client').addEventListener('click',()=>
+    editClientModal(t,ctx)
+  );
+
+  $('#manage-access').addEventListener('click',()=>
+    clientAccessModal(t,ctx)
+  );
+
+  $('#manage-tenant-theme').addEventListener('click',()=>
+    openThemeManager(t.id,ctx,{title:'Tenant Branding'})
+  );
+
+  $('#manage-tenant-theme-card')?.addEventListener('click',()=>
+    openThemeManager(t.id,ctx,{title:'Tenant Branding'})
+  );
+
+  $('#connected-email').addEventListener('click',()=>{
+    state.selectedTenantId=t.id;
+    localStorage.setItem('rmr_selected_tenant',t.id);
+    window.location.href='/commercial#email';
+  });
+
+  $('#open-client-workspace').addEventListener('click',()=>
+    ctx.enterClientWorkspace(t.id)
+  );
+
+  $('#open-website')?.addEventListener('click',()=>
+    window.open(w.open_url,'_blank','noopener')
+  );
 }
 
 

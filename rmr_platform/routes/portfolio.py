@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..access import create_invitation, invitation_summary, invitation_url, serialize_invitation
+from ..access import (
+    create_invitation,
+    invitation_summary,
+    invitation_url,
+    serialize_invitation,
+)
 from ..config import settings
 from ..db import get_db
 from ..models import (
@@ -39,10 +44,14 @@ def _tenant_financials(db: Session, tenant_id: str) -> dict[str, int | bool]:
         db.execute(
             select(TenantService, ServiceCatalog)
             .join(ServiceCatalog, ServiceCatalog.code == TenantService.service_code)
-            .where(TenantService.tenant_id == tenant_id, TenantService.status == "active")
+            .where(
+                TenantService.tenant_id == tenant_id, TenantService.status == "active"
+            )
         )
     )
-    mrr = sum(ts.contract_price_cents for ts, catalog in rows if catalog.cadence == "monthly")
+    mrr = sum(
+        ts.contract_price_cents for ts, catalog in rows if catalog.cadence == "monthly"
+    )
     current_period = date.today().strftime("%Y-%m")
     usage = (
         db.scalar(
@@ -64,7 +73,9 @@ def _tenant_financials(db: Session, tenant_id: str) -> dict[str, int | bool]:
 
 
 def _onboarding_summary(db: Session, tenant_id: str) -> dict[str, object] | None:
-    project = db.scalar(select(OnboardingProject).where(OnboardingProject.tenant_id == tenant_id))
+    project = db.scalar(
+        select(OnboardingProject).where(OnboardingProject.tenant_id == tenant_id)
+    )
     if not project:
         return None
     steps = list(
@@ -106,7 +117,9 @@ def _website_summary(db: Session, tenant: Tenant) -> dict[str, object]:
 
 
 def _can_manage_client_users(user: User, tenant_id: str) -> bool:
-    return is_global_admin(user) or (user.tenant_id == tenant_id and user.tenant_role == "CLIENT_ADMIN")
+    return is_global_admin(user) or (
+        user.tenant_id == tenant_id and user.tenant_role == "CLIENT_ADMIN"
+    )
 
 
 def _invitation_delivery_label(invitation: UserInvitation) -> str:
@@ -121,15 +134,43 @@ def _invitation_delivery_label(invitation: UserInvitation) -> str:
     return "Delivery pending"
 
 
-def _serialized_invitation_with_delivery(invitation: UserInvitation) -> dict[str, object]:
+def _serialized_invitation_with_delivery(
+    invitation: UserInvitation,
+) -> dict[str, object]:
     return {
         **(serialize_invitation(invitation) or {}),
         "delivery_status": _invitation_delivery_label(invitation),
-        "delivery_mode": "local_link" if settings.local_recovery_mode else "configured_email",
+        "delivery_mode": (
+            "local_link" if settings.local_recovery_mode else "configured_email"
+        ),
     }
 
 
-def _invitation_delivery(invitation: UserInvitation, raw_token: str) -> dict[str, object]:
+def _send_invitation_email(
+    invitation: UserInvitation, raw_token: str, tenant: Tenant
+) -> str:
+    # Lazy import to avoid circular imports between portfolio and
+    # client_admin_corrections modules.
+    from ..client_admin_corrections import _send_system_email
+
+    activation_url = invitation_url(raw_token)
+    role_label = invitation.tenant_role.replace("_", " ").title()
+    subject = f"You're invited to {tenant.name}"
+    body = (
+        f"Hello {invitation.full_name},\n\n"
+        f"You have been invited to join {tenant.name} as {role_label}.\n\n"
+        f"Activate your account using the secure link below:\n{activation_url}\n"
+    )
+    return _send_system_email(invitation.email, subject, body)
+
+
+def _invitation_delivery(
+    db: Session,
+    user: User,
+    tenant: Tenant,
+    invitation: UserInvitation,
+    raw_token: str,
+) -> dict[str, object]:
     data: dict[str, object] = {
         "invitation": _serialized_invitation_with_delivery(invitation),
         "delivery": "local_link" if settings.local_recovery_mode else "email_required",
@@ -137,11 +178,58 @@ def _invitation_delivery(invitation: UserInvitation, raw_token: str) -> dict[str
     }
     if settings.local_recovery_mode:
         data["activation_url"] = invitation_url(raw_token)
+        return data
+
+    try:
+        result = _send_invitation_email(invitation, raw_token, tenant)
+    except Exception as exc:  # noqa: BLE001 - never let email failures crash the API
+        data["delivery"] = "failed"
+        data["delivery_status"] = "Delivery failed"
+        data["invitation"]["delivery_status"] = "Delivery failed"
+        audit(
+            db,
+            user,
+            "client.invitation.delivery_failed",
+            tenant_id=tenant.id,
+            entity_type="user_invitation",
+            entity_id=invitation.id,
+            data={"email": invitation.email, "error": str(exc)},
+        )
+        return data
+
+    if result == "sent":
+        data["delivery"] = "sent"
+        data["delivery_status"] = "Sent"
+        data["invitation"]["delivery_status"] = "Sent"
+        audit(
+            db,
+            user,
+            "client.invitation.delivery_sent",
+            tenant_id=tenant.id,
+            entity_type="user_invitation",
+            entity_id=invitation.id,
+            data={"email": invitation.email},
+        )
+    else:
+        data["delivery"] = "failed"
+        data["delivery_status"] = "Delivery failed"
+        data["invitation"]["delivery_status"] = "Delivery failed"
+        audit(
+            db,
+            user,
+            "client.invitation.delivery_failed",
+            tenant_id=tenant.id,
+            entity_type="user_invitation",
+            entity_id=invitation.id,
+            data={"email": invitation.email, "result": result},
+        )
     return data
 
 
 @router.get("/portfolio/summary")
-def portfolio_summary(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def portfolio_summary(
+    user: User = Depends(current_user), db: Session = Depends(get_db)
+):
     require_global_admin(user)
     tenants = list(db.scalars(select(Tenant).order_by(Tenant.name)))
     financials = {tenant.id: _tenant_financials(db, tenant.id) for tenant in tenants}
@@ -158,7 +246,8 @@ def portfolio_summary(user: User = Depends(current_user), db: Session = Depends(
     unread = (
         db.scalar(
             select(func.count(Notification.id)).where(
-                Notification.recipient_scope == "GLOBAL_ADMIN", Notification.status == "unread"
+                Notification.recipient_scope == "GLOBAL_ADMIN",
+                Notification.status == "unread",
             )
         )
         or 0
@@ -166,7 +255,9 @@ def portfolio_summary(user: User = Depends(current_user), db: Session = Depends(
     pending_requests = (
         db.scalar(
             select(func.count(Notification.id)).where(
-                Notification.notification_type.in_(["solution_request", "expansion_interest"]),
+                Notification.notification_type.in_(
+                    ["solution_request", "expansion_interest"]
+                ),
                 Notification.status == "unread",
             )
         )
@@ -174,16 +265,24 @@ def portfolio_summary(user: User = Depends(current_user), db: Session = Depends(
     )
     return {
         "kpis": {
-            "active_clients": sum(1 for t in tenants if t.status in {"live", "private"}),
-            "onboarding_clients": sum(1 for t in tenants if t.status in {"onboarding", "invitation_pending"}),
+            "active_clients": sum(
+                1 for t in tenants if t.status in {"live", "private"}
+            ),
+            "onboarding_clients": sum(
+                1 for t in tenants if t.status in {"onboarding", "invitation_pending"}
+            ),
             "mrr_cents": total_mrr,
             "arr_cents": total_mrr * 12,
             "recognized_revenue_cents": int(totals[0]),
             "direct_costs_cents": int(totals[1]),
             "rmr_share_cents": int(totals[2]),
             "step2_share_cents": int(totals[3]),
-            "average_adoption": round(sum(t.adoption_score for t in tenants) / max(len(tenants), 1)),
-            "needs_attention": sum(1 for t in tenants if t.health_status in {"Attention", "At Risk"}),
+            "average_adoption": round(
+                sum(t.adoption_score for t in tenants) / max(len(tenants), 1)
+            ),
+            "needs_attention": sum(
+                1 for t in tenants if t.health_status in {"Attention", "At Risk"}
+            ),
             "unread_notifications": unread,
             "expansion_signals": pending_requests,
         },
@@ -231,11 +330,16 @@ def create_tenant(
             )
         )
         if pending:
-            field_errors["primary_contact_email"] = "A pending invitation already exists for this email."
+            field_errors["primary_contact_email"] = (
+                "A pending invitation already exists for this email."
+            )
     if field_errors:
         raise HTTPException(
             status_code=409,
-            detail={"message": "Correct the highlighted fields and try again.", "field_errors": field_errors},
+            detail={
+                "message": "Correct the highlighted fields and try again.",
+                "field_errors": field_errors,
+            },
         )
 
     tenant = Tenant(
@@ -271,7 +375,9 @@ def create_tenant(
     db.add(project)
     db.flush()
     for stage_number, code, name, owner in ONBOARDING_STAGES:
-        display_name = "Tenant provisioning & client access" if stage_number == 2 else name
+        display_name = (
+            "Tenant provisioning & client access" if stage_number == 2 else name
+        )
         db.add(
             OnboardingStep(
                 project_id=project.id,
@@ -290,7 +396,9 @@ def create_tenant(
         slug=slug,
         template_family="executive-authority",
         company_name=payload.name.strip(),
-        wordmark=(payload.name.split()[0] if payload.name.split() else payload.name).upper(),
+        wordmark=(
+            payload.name.split()[0] if payload.name.split() else payload.name
+        ).upper(),
         status="draft",
         external_url=payload.website_url.strip(),
     )
@@ -327,7 +435,9 @@ def create_tenant(
     for service_item in payload.services:
         code = str(service_item.get("service_code", ""))
         catalog = db.scalar(
-            select(ServiceCatalog).where(ServiceCatalog.code == code, ServiceCatalog.active.is_(True))
+            select(ServiceCatalog).where(
+                ServiceCatalog.code == code, ServiceCatalog.active.is_(True)
+            )
         )
         if not catalog:
             continue
@@ -336,7 +446,9 @@ def create_tenant(
                 tenant_id=tenant.id,
                 service_code=code,
                 contract_price_cents=int(
-                    service_item.get("contract_price_cents", catalog.standard_price_cents)
+                    service_item.get(
+                        "contract_price_cents", catalog.standard_price_cents
+                    )
                 ),
                 usage_price_cents=int(service_item.get("usage_price_cents", 0)),
                 cadence=catalog.cadence,
@@ -357,7 +469,11 @@ def create_tenant(
             invited_by_user_id=user.id,
             team_name="Administration",
         )
-        invitation_data = _invitation_delivery(invitation, raw_token)
+        # Commit so the invitation is durably persisted before attempting
+        # to send the activation email.
+        db.commit()
+        invitation_data = _invitation_delivery(db, user, tenant, invitation, raw_token)
+        db.commit()
 
     db.add(
         Notification(
@@ -404,20 +520,34 @@ def update_tenant(
     if not tenant:
         raise HTTPException(status_code=404, detail="Client not found")
     updates = payload.model_dump(exclude_unset=True)
-    if "primary_contact_email" in updates and updates["primary_contact_email"]:
-        updates["primary_contact_email"] = updates["primary_contact_email"].strip().lower()
+    if updates.get("primary_contact_email"):
+        updates["primary_contact_email"] = (
+            updates["primary_contact_email"].strip().lower()
+        )
     for field, value in updates.items():
         setattr(tenant, field, value)
-    audit(db, user, "tenant.updated", tenant_id=tenant.id, entity_type="tenant", entity_id=tenant.id, data=updates)
+    audit(
+        db,
+        user,
+        "tenant.updated",
+        tenant_id=tenant.id,
+        entity_type="tenant",
+        entity_id=tenant.id,
+        data=updates,
+    )
     db.commit()
     return {"tenant": model_dict(tenant)}
 
 
 @router.get("/tenants/{tenant_id}/access")
-def tenant_access(tenant_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def tenant_access(
+    tenant_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)
+):
     require_tenant_access(user, tenant_id)
     if not _can_manage_client_users(user, tenant_id):
-        raise HTTPException(status_code=403, detail="Client user administration access required")
+        raise HTTPException(
+            status_code=403, detail="Client user administration access required"
+        )
     tenant = db.get(Tenant, tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Client not found")
@@ -428,19 +558,31 @@ def tenant_access(tenant_id: str, user: User = Depends(current_user), db: Sessio
             .order_by(UserInvitation.created_at.desc())
         )
     )
-    users = list(db.scalars(select(User).where(User.tenant_id == tenant_id).order_by(User.full_name)))
+    users = list(
+        db.scalars(
+            select(User).where(User.tenant_id == tenant_id).order_by(User.full_name)
+        )
+    )
     return {
         "access": invitation_summary(db, tenant_id),
         "delivery_environment": {
-            "mode": "local_link" if settings.local_recovery_mode else "configured_email",
-            "label": "Local Product Owner delivery" if settings.local_recovery_mode else "Configured email delivery",
+            "mode": (
+                "local_link" if settings.local_recovery_mode else "configured_email"
+            ),
+            "label": (
+                "Local Product Owner delivery"
+                if settings.local_recovery_mode
+                else "Configured email delivery"
+            ),
             "description": (
                 "Copy or open the secure activation link. No email is claimed as sent in this local environment."
                 if settings.local_recovery_mode
                 else "Invitation delivery depends on the configured production email provider."
             ),
         },
-        "invitations": [_serialized_invitation_with_delivery(row) for row in invitations],
+        "invitations": [
+            _serialized_invitation_with_delivery(row) for row in invitations
+        ],
         "users": [model_dict(row, exclude={"password_hash"}) for row in users],
     }
 
@@ -456,7 +598,9 @@ def invite_tenant_user(
     require_request_origin(request)
     require_tenant_access(user, tenant_id)
     if not _can_manage_client_users(user, tenant_id):
-        raise HTTPException(status_code=403, detail="Client user administration access required")
+        raise HTTPException(
+            status_code=403, detail="Client user administration access required"
+        )
     tenant = db.get(Tenant, tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Client not found")
@@ -497,7 +641,9 @@ def invite_tenant_user(
         data={"email": invitation.email, "tenant_role": invitation.tenant_role},
     )
     db.commit()
-    return _invitation_delivery(invitation, raw_token)
+    result = _invitation_delivery(db, user, tenant, invitation, raw_token)
+    db.commit()
+    return result
 
 
 @router.post("/invitations/{invitation_id}/resend")
@@ -513,7 +659,9 @@ def resend_invitation(
         raise HTTPException(status_code=404, detail="Invitation not found")
     require_tenant_access(user, old.tenant_id)
     if not _can_manage_client_users(user, old.tenant_id):
-        raise HTTPException(status_code=403, detail="Client user administration access required")
+        raise HTTPException(
+            status_code=403, detail="Client user administration access required"
+        )
     tenant = db.get(Tenant, old.tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Client not found")
@@ -538,11 +686,15 @@ def resend_invitation(
         data={"replaces": old.id},
     )
     db.commit()
-    return _invitation_delivery(invitation, raw_token)
+    result = _invitation_delivery(db, user, tenant, invitation, raw_token)
+    db.commit()
+    return result
 
 
 @router.get("/tenants/{tenant_id}/client360")
-def client_360(tenant_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def client_360(
+    tenant_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)
+):
     require_tenant_access(user, tenant_id)
     tenant = db.get(Tenant, tenant_id)
     if not tenant:
@@ -563,7 +715,8 @@ def client_360(tenant_id: str, user: User = Depends(current_user), db: Session =
         "metrics": metrics,
         "financials": financials,
         "services": [
-            {"tenant_service": model_dict(ts), "catalog": model_dict(cat)} for ts, cat in services
+            {"tenant_service": model_dict(ts), "catalog": model_dict(cat)}
+            for ts, cat in services
         ],
         "access": access,
         "onboarding": _onboarding_summary(db, tenant.id),
@@ -587,7 +740,9 @@ def client_360(tenant_id: str, user: User = Depends(current_user), db: Session =
 
 
 @router.get("/tenants/{tenant_id}/success")
-def client_success(tenant_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def client_success(
+    tenant_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)
+):
     require_global_admin(user)
     tenant = db.get(Tenant, tenant_id)
     if not tenant:
@@ -679,7 +834,9 @@ def record_support_access(
 
 
 @router.get("/support-access")
-def support_access_log(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def support_access_log(
+    user: User = Depends(current_user), db: Session = Depends(get_db)
+):
     require_global_admin(user)
     rows = list(
         db.execute(
