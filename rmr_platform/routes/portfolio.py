@@ -441,20 +441,19 @@ def create_tenant(
         )
         if not catalog:
             continue
+        entered_price = int(service_item.get("contract_price_cents", 0))
+        is_usage = catalog.cadence == "usage"
         db.add(
             TenantService(
                 tenant_id=tenant.id,
                 service_code=code,
-                contract_price_cents=int(
-                    service_item.get(
-                        "contract_price_cents", catalog.standard_price_cents
-                    )
-                ),
-                usage_price_cents=int(service_item.get("usage_price_cents", 0)),
+                contract_price_cents=0 if is_usage else entered_price,
+                usage_price_cents=int(service_item.get("usage_price_cents", entered_price if is_usage else 0)),
+                # Preserve the catalog's billing cadence for new assignments.
                 cadence=catalog.cadence,
                 status="active",
                 effective_date=date.today(),
-                next_billing_date=date.today() + timedelta(days=30),
+                next_billing_date=None if is_usage else date.today() + timedelta(days=30),
             )
         )
 

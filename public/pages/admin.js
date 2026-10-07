@@ -14,6 +14,7 @@ export async function renderAdminPage(route, ctx) {
     if (route === 'client-success') return await clientSuccess(page, ctx);
     if (route === 'pricing') return await pricing(page, ctx);
     if (route === 'partner-economics') return await partnerEconomics(page, ctx);
+    if (route === 'ar-usage') return await adaptiveResearchUsage(page, ctx);
     if (route === 'onboarding') return await onboarding(page, ctx);
     if (route === 'service-requests') return await serviceRequests(page, ctx);
     if (route === 'training') return await trainingAdmin(page);
@@ -25,6 +26,52 @@ export async function renderAdminPage(route, ctx) {
     page.innerHTML = empty('Unable to load this workspace', error.message);
     toast(error.message, 'error');
   }
+}
+
+async function adaptiveResearchUsage(page, ctx) {
+  if (state.user?.global_role !== 'RMR_OWNER') {
+    page.innerHTML = empty('Access denied', 'This report is available to the RMR Owner only.');
+    return;
+  }
+  const query = new URLSearchParams();
+  const dates = new URLSearchParams(location.hash.split('?')[1] || '');
+  for (const key of ['from_date', 'to_date']) if (dates.get(key)) query.set(key, dates.get(key));
+  const tenantId = dates.get('tenant');
+  const runId = dates.get('run');
+  if (tenantId) query.set('tenant_id', tenantId);
+  if (runId) query.set('run_id', runId);
+  const data = await api(`/api/integrations/prospectiq/v1/owner/adaptive-research/usage?${query}`);
+  const cost = (value, reason = '') => {
+    if (value !== null && value !== undefined) return `$${Number(value).toFixed(4)}`;
+    if (reason.startsWith('pricing_missing_for_model:')) {
+      const [, model, fields = ''] = reason.split(':');
+      return `Pricing missing for ${esc(model)}: ${esc(fields.replaceAll('_', ' '))}`;
+    }
+    return reason ? `Unavailable: ${esc(reason.replaceAll('_', ' '))}` : 'Unavailable / pending';
+  };
+  const back = '<button class="button secondary" data-ar-back>Back</button>';
+  if (runId) {
+    const run = data.run;
+    page.innerHTML = `${pageHead('Adaptive Research run', 'Actual provider usage recorded by ProspectIQ.', back)}
+      <div class="kpi-grid"><div class="kpi"><div class="kpi-label">Actual cost</div><div class="kpi-value">${cost(run.calculated_actual_cost_usd, run.calculated_actual_cost_reason)}</div></div><div class="kpi"><div class="kpi-label">Status</div><div class="kpi-value">${esc(run.status)}</div></div></div>
+      <section class="table-card"><div class="table-toolbar"><h2>Run ${esc(run.id)}</h2></div><div class="card">${esc(dateFmt(run.created_at))} · ${esc(run.requested_by_name || run.requested_by_email || run.requested_by_user_id || 'Unknown user')} · ${number(run.selected_lead_count)} selected · ${number(run.web_search_calls)} searches · ${number(run.total_tokens)} tokens</div><div class="table-wrap"><table class="data-table"><thead><tr><th>Lead</th><th>Status</th><th>Provider tasks</th></tr></thead><tbody>${data.leads.map(lead => `<tr><td>${esc(lead.company_name)}<div class="tiny muted">${esc(lead.lead_id)}</div></td><td>${badge(lead.status, statusTone(lead.status))}</td><td>${(data.task_usage || []).find(item => item.lead_id === lead.lead_id)?.tasks?.map(task => `${esc(task.canonical_display_label)}: ${number(task.total_tokens)} tokens, ${number(task.web_search_calls)} searches${task.calculated_actual_cost_usd == null ? '' : `, ${cost(task.calculated_actual_cost_usd)}`}`).join('<br>') || 'No task usage recorded'}</td></tr>`).join('')}</tbody></table></div></section>`;
+    $('[data-ar-back]', page).addEventListener('click', () => ctx.navigate(`ar-usage?tenant=${tenantId}`));
+    return;
+  }
+  if (tenantId) {
+    const client = data.clients[0];
+    page.innerHTML = `${pageHead(`Adaptive Research — ${client ? esc(client.client_name) : 'Client'}`, 'PIQ run-level actual provider cost. Unavailable costs are not counted as zero.', back)}
+      <section class="table-card"><div class="table-toolbar"><h2>Research runs</h2></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Run / date</th><th>User</th><th>Records</th><th>Status</th><th>Estimated</th><th>Actual provider cost</th><th></th></tr></thead><tbody>${data.runs.map(run => `<tr><td>${esc(run.id)}<div class="tiny muted">${esc(dateFmt(run.created_at))}</div></td><td>${esc(run.requested_by_name || run.requested_by_email || run.requested_by_user_id || 'Unknown')}</td><td>${number(run.selected_lead_count)}</td><td>${badge(run.status, statusTone(run.status))}</td><td>${cost(run.estimated_cost_usd)}</td><td>${cost(run.calculated_actual_cost_usd, run.calculated_actual_cost_reason)}</td><td><button class="button secondary small" data-ar-run="${esc(run.id)}">Details</button></td></tr>`).join('') || '<tr><td colspan="7">No runs found.</td></tr>'}</tbody></table></div></section>`;
+    $('[data-ar-back]', page).addEventListener('click', () => ctx.navigate('ar-usage'));
+    $$('[data-ar-run]', page).forEach(button => button.addEventListener('click', () => ctx.navigate(`ar-usage?tenant=${tenantId}&run=${button.dataset.arRun}`)));
+    return;
+  }
+  const s = data.summary;
+  page.innerHTML = `${pageHead('Adaptive Research Usage & Cost', 'Owner-only, actual provider costs from ProspectIQ. Missing costs remain unavailable.')}
+    <div class="kpi-grid"><div class="kpi"><div class="kpi-label">Total actual cost</div><div class="kpi-value">${cost(s.actual_cost_usd)}</div></div><div class="kpi"><div class="kpi-label">This month</div><div class="kpi-value">${cost(s.month_actual_cost_usd)}</div></div><div class="kpi"><div class="kpi-label">Completed runs</div><div class="kpi-value">${number(s.completed_runs)}</div></div><div class="kpi"><div class="kpi-label">Records researched</div><div class="kpi-value">${number(s.records_researched)}</div></div></div>
+    <p class="muted">${number(s.unavailable_cost_runs)} run(s) have unavailable or pending actual cost.</p>
+    <section class="table-card"><div class="table-toolbar"><h2>Clients</h2></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Client</th><th>Runs</th><th>Records</th><th>Actual cost</th><th>Last run</th><th></th></tr></thead><tbody>${data.clients.map(client => `<tr><td>${esc(client.client_name)}</td><td>${number(client.run_count)}</td><td>${number(client.records_researched)}</td><td>${cost(client.actual_cost_usd)}${client.unavailable_cost_runs ? `<div class="tiny muted">${number(client.unavailable_cost_runs)} unavailable</div>` : ''}</td><td>${client.last_run_at ? esc(dateFmt(client.last_run_at)) : '—'}</td><td><button class="button secondary small" data-ar-client="${esc(client.tenant_id)}">View runs</button></td></tr>`).join('') || '<tr><td colspan="6">No mapped clients.</td></tr>'}</tbody></table></div></section>`;
+  $$('[data-ar-client]', page).forEach(button => button.addEventListener('click', () => ctx.navigate(`ar-usage?tenant=${button.dataset.arClient}`)));
 }
 
 async function portfolio(page, ctx) {
@@ -83,13 +130,19 @@ async function addClientModal(ctx) {
   </form>`;
   modal({title:'Add New Client',body,wide:true,footer:'<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="save-client">Create client</button>',onOpen:(root,close)=>{
     const form=$('#add-client-form',root), nameInput=$('[name=name]',root), slugInput=$('[name=slug]',root), save=$('#save-client',root);
+    root.querySelectorAll('[data-service-price]').forEach(input=>{
+      const service=catalog.find(s=>s.code===input.dataset.servicePrice);
+      const label='Monthly Price (USD; 0 = unpriced/non-billable)';
+      input.title=label;input.setAttribute('aria-label',`${service?.name || ''} ${label}`);
+      input.insertAdjacentHTML('beforebegin','<small class="muted">Monthly Price</small>');
+    });
     nameInput.addEventListener('input',()=>{if(!slugInput.dataset.edited)slugInput.value=nameInput.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')});
     slugInput.addEventListener('input',()=>slugInput.dataset.edited='1');
     save.addEventListener('click',async()=>{
       if(!form.reportValidity())return;
       save.disabled=true; save.textContent='Creating client…';
       const fd=new FormData(form);
-      const services=[...root.querySelectorAll('input[name=services]:checked')].map(box=>({service_code:box.value,contract_price_cents:Math.round(Number(root.querySelector(`[data-service-price="${box.value}"]`).value)*100),usage_price_cents:box.value==='piq_enhancement'?Math.round(Number(root.querySelector(`[data-service-price="${box.value}"]`).value)*100):0}));
+      const services=[...root.querySelectorAll('input[name=services]:checked')].map(box=>({service_code:box.value,contract_price_cents:Math.round(Number(root.querySelector(`[data-service-price="${box.value}"]`).value)*100)}));
       try{
         const result=await api('/api/tenants',{method:'POST',body:{name:fd.get('name'),slug:fd.get('slug'),industry:fd.get('industry'),country:fd.get('country'),timezone:fd.get('timezone'),seller_org:fd.get('seller_org'),seller_name:fd.get('seller_name'),website_mode:fd.get('website_mode'),website_url:fd.get('website_url'),primary_contact_name:fd.get('primary_contact_name'),primary_contact_email:fd.get('primary_contact_email'),invite_primary_admin:form.invite_primary_admin.checked,services}});
         close(); state.selectedTenantId=result.tenant.id; localStorage.setItem('rmr_selected_tenant',result.tenant.id); await ctx.refreshTenants({refreshShell:true});
@@ -381,12 +434,32 @@ async function pricing(page,ctx){
   page.innerHTML=`${pageHead('Client Pricing','Configure what each client pays for its authorized services.',tenant?'<button class="button" id="add-service">+ Add service</button>':'')}<section class="table-card"><div class="table-toolbar"><h2>Clients</h2></div><div class="table-wrap no-vertical"><table class="data-table"><thead><tr><th>Client</th><th>${acronym('MRR')}</th><th>Status</th><th></th></tr></thead><tbody>${summary.tenants.map(t=>`<tr><td><strong>${esc(t.name)}</strong></td><td>${money(t.mrr_cents)}</td><td>${badge(t.status,statusTone(t.status))}</td><td><button class="button secondary small" data-price-client="${t.id}">Manage</button></td></tr>`).join('')}</tbody></table></div></section>${tenant?`<section class="table-card"><div class="table-toolbar"><h2>${esc(tenant.name)} service schedule</h2></div><div class="table-wrap no-vertical"><table class="data-table"><thead><tr><th>Service</th><th>Standard price</th><th>Client price</th><th>Cadence</th><th>Status</th></tr></thead><tbody>${services.map(s=>`<tr><td><strong>${esc(s.catalog.name)}</strong></td><td>${money(s.catalog.standard_price_cents)}</td><td>${money(s.tenant_service.contract_price_cents)}</td><td>${esc(s.tenant_service.cadence)}</td><td>${badge(s.tenant_service.status,statusTone(s.tenant_service.status))}</td></tr>`).join('')}</tbody></table></div></section>`:''}`;
   $$('[data-price-client]').forEach(btn=>btn.addEventListener('click',()=>{state.selectedTenantId=btn.dataset.priceClient;localStorage.setItem('rmr_selected_tenant',state.selectedTenantId);pricing(page,ctx)}));
   $('#add-service')?.addEventListener('click',()=>addServiceModal(tenant,ctx));
+  if(tenant){
+    page.insertAdjacentHTML('beforeend',monthlyPriceEditor(services));
+    $$('[data-save-monthly-price]',page).forEach(button=>button.addEventListener('click',async()=>{
+      const input=page.querySelector(`[data-monthly-price="${button.dataset.saveMonthlyPrice}"]`);
+      if(!input.reportValidity())return;
+      button.disabled=true;
+      try{
+        await api(`/api/tenant-services/${button.dataset.saveMonthlyPrice}`,{method:'PATCH',body:{contract_price_cents:Math.round(Number(input.value)*100)}});
+        toast('Monthly price saved. Existing subscriptions are unchanged.');await pricing(page,ctx);
+      }catch(error){toast(error.message,'error');button.disabled=false;}
+    }));
+  }
+}
+
+function monthlyPriceEditor(services){
+  return `<section class="card"><h2>Assigned Monthly Prices</h2><p>For active sandbox subscriptions, changes are queued for the next billing cycle without proration. The current paid period and historical acceptance remain unchanged. Set 0 for no monthly charge next cycle.</p>
+    ${services.filter(s=>s.tenant_service.cadence==='monthly').map(s=>`<div class="list-item"><label class="grow" for="monthly-price-${esc(s.tenant_service.id)}">${esc(s.catalog.name)} — Monthly Price (USD)</label>
+      <input class="input" id="monthly-price-${esc(s.tenant_service.id)}" data-monthly-price="${esc(s.tenant_service.id)}" type="number" min="0" step="0.01" required value="${s.tenant_service.contract_price_cents/100}">
+      <button class="button secondary small" data-save-monthly-price="${esc(s.tenant_service.id)}">Save price</button></div>`).join('')}
+  </section>`;
 }
 
 async function addServiceModal(tenant,ctx){
   const [catalog,current]=await Promise.all([api('/api/service-catalog'),api(`/api/tenants/${tenant.id}/services`)]);const existing=new Set(current.services.map(s=>s.tenant_service.service_code));const options=catalog.services.filter(s=>!existing.has(s.code));
   if(!options.length){toast('All approved services are already on this client schedule');return;}
-  modal({title:`Add service — ${esc(tenant.name)}`,body:`<form id="service-form" class="form-grid">${selectField('Service','service_code',options.map(s=>[s.code,s.name]))}${field('Client contract price','contract_price','number',options[0].standard_price_cents/100,true)}${field('Usage price','usage_price','number',0)}<div class="field full"><label>Notes</label><textarea name="notes"></textarea></div></form>`,footer:'<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="save-service">Add service</button>',onOpen:(root,close)=>{const select=$('[name=service_code]',root);select.addEventListener('change',()=>{$('[name=contract_price]',root).value=(options.find(s=>s.code===select.value)?.standard_price_cents||0)/100});$('#save-service',root).addEventListener('click',async()=>{const form=$('#service-form',root);try{await api(`/api/tenants/${tenant.id}/services`,{method:'POST',body:{service_code:form.service_code.value,contract_price_cents:Math.round(Number(form.contract_price.value)*100),usage_price_cents:Math.round(Number(form.usage_price.value)*100),notes:form.notes.value}});toast('Service added');close();ctx.navigate('pricing')}catch(e){toast(e.message,'error')}})}});
+  modal({title:`Add service — ${esc(tenant.name)}`,body:`<form id="service-form" class="form-grid">${selectField('Service','service_code',options.map(s=>[s.code,s.name]))}${field('Client contract price','contract_price','number',options[0].standard_price_cents/100,false)}${field('Usage price','usage_price','number',0)}<div class="field full"><label>Notes</label><textarea name="notes"></textarea></div></form>`,footer:'<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="save-service">Add service</button>',onOpen:(root,close)=>{const select=$('[name=service_code]',root);select.addEventListener('change',()=>{$('[name=contract_price]',root).value=(options.find(s=>s.code===select.value)?.standard_price_cents||0)/100});$('#save-service',root).addEventListener('click',async()=>{const form=$('#service-form',root);try{await api(`/api/tenants/${tenant.id}/services`,{method:'POST',body:{service_code:form.service_code.value,contract_price_cents:Math.round(Number(form.contract_price.value)*100),usage_price_cents:Math.round(Number(form.usage_price.value)*100),notes:form.notes.value}});toast('Service added');close();ctx.navigate('pricing')}catch(e){toast(e.message,'error')}})}});
 }
 
 async function partnerEconomics(page,ctx){
@@ -448,7 +521,7 @@ function trainingModal(){modal({title:'Add training resource',body:`<form id="tr
 
 async function supportAccess(page){const data=await api('/api/support-access');page.innerHTML=`${pageHead('Support Access Audit','Review authorized read-only access to client operational areas.')}<div class="kpi-grid">${kpi('Recorded access events',number(data.events.length),'Authorized support reviews')}${kpi('Client operating edits','0','Client records remain client-controlled')}${kpi('Access model','Read only','RMR/Step2 support')}${kpi('Support method','Coach','Client makes corrections')}</div><section class="table-card"><div class="table-toolbar"><h2>Administrative access history</h2></div><div class="table-wrap no-vertical"><table class="data-table"><thead><tr><th>Client</th><th>Administrator</th><th>Area viewed</th><th>Access</th><th>Purpose</th><th>Timestamp</th></tr></thead><tbody>${data.events.length?data.events.map(e=>`<tr><td>${esc(e.tenant)}</td><td>${esc(e.administrator)}</td><td>${esc(e.access.area)}</td><td>${badge('Read only','green')}</td><td>${esc(e.access.purpose)}</td><td>${dateFmt(e.access.created_at)}</td></tr>`).join(''):`<tr><td colspan="6">${empty('No support access recorded','Authorized read-only reviews will appear here.')}</td></tr>`}</tbody></table></div></section>`}
 
-async function systemHealth(page){const [health,info]=await Promise.all([api('/api/health'),api('/api/system/info')]);const b=health.business_status;page.innerHTML=`${pageHead('System Health','Plain-language operating status with technical detail available on demand.')}<section class="hero-card"><div><div class="eyebrow">PLATFORM STATUS</div><h2>${esc(b.headline)}</h2><p>${esc(b.impact)}</p><p><strong>Recommended action:</strong> ${esc(b.action)}</p></div><div class="hero-stat"><span>Status</span><strong>${esc(health.status)}</strong><small>Version ${esc(health.version)}</small></div></section>${health.warnings.length?`<div class="notice-card"><strong>Pilot-mode notices</strong><ul>${health.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>`:''}<div class="grid three">${Object.entries(health.checks).map(([key,value])=>healthCard(key,value)).join('')}</div><p class="tiny muted">${esc(info.database)} · ${esc(info.environment)} · ${info.deployment.containerized?'Containerized':'Direct runtime'}</p>`}
+async function systemHealth(page){const [health,info]=await Promise.all([api('/api/health'),api('/api/system/info')]);const b=health.business_status;page.innerHTML=`${pageHead('System Health','Plain-language operating status with technical detail available on demand.')}<section class="hero-card"><div><div class="eyebrow">PLATFORM STATUS</div><h2>${esc(b.headline)}</h2><p>${esc(b.impact)}</p><p><strong>Recommended action:</strong> ${esc(b.action)}</p></div><div class="hero-stat"><span>Status</span><strong>${esc(health.status)}</strong><small>Version ${esc(health.version)}</small></div></section>${health.warnings.length?`<div class="notice-card"><strong>Pilot-mode notices</strong><ul>${health.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>`:''}<div class="grid three">${Object.entries(health.checks).map(([key,value])=>healthCard(key,value)).join('')}</div><p class="tiny muted">${esc(info.database)} · ${esc(info.environment)} · ${info.deployment.containerized?'Containerized':'Direct runtime'}</p>`;if(state.user?.global_role==='RMR_OWNER'){const s=await api('/api/billing/stripe/readiness');const yes=v=>v?'Yes':'No';page.insertAdjacentHTML('beforeend',`<section class="card"><h3>Billing activation readiness</h3><p>Stripe environment: ${esc(s.stripe_environment)} · Credentials configured: ${yes(s.stripe_credentials_configured)} · Webhook configured: ${yes(s.webhook_configured)}</p><p>Live charging enabled: ${yes(s.live_charging_enabled)} · Monthly billing enabled: ${yes(s.monthly_billing_enabled)} · Adaptive Research billing: ${esc(s.ar_billing_mode)}</p><p><strong>${s.configuration_ready?'Ready':'Not ready'}</strong>${s.reason?` · ${esc(s.reason)}`:''}</p></section>`);}}
 function healthCard(key,value){const label=key.replaceAll('_',' ');const plain={database:'Client and platform data are available.',storage:'Application storage is available.',migrations:'Database structure matches the running release.',payment_provider:'Payment provider is configured for the current environment.',email:'Outbound/system email status for the current environment.',backups:'Backup storage and evidence are available.'}[key]||'Platform component status.';return `<section class="card v531-health-card"><div class="v531-health-head"><strong>${esc(label)}</strong>${badge(value.ok?'Healthy':'Attention',value.ok?'green':'amber')}</div><p>${esc(plain)}</p><details><summary>View Technical Details</summary><pre class="tiny wrap-text">${esc(JSON.stringify(value,null,2))}</pre></details></section>`}
 
 function actionKpi(label,value,note,action,scope="portfolio"){return `<button class="kpi kpi-action" type="button" data-${scope}-kpi="${esc(action)}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-note">${note}</div><span class="kpi-open">Review →</span></button>`}

@@ -159,6 +159,11 @@ def review_request(request_id: str, payload: SolutionRequestReview, request: Req
     if not request_row:
         raise HTTPException(status_code=404, detail="Service request not found")
     if payload.status == "Active":
+        from .billing import _lock_tenant
+        from ..billing_renewals import record_change
+        tenant_id = request_row.tenant_id
+        _lock_tenant(db, tenant_id)
+        request_row = db.get(SolutionRequest, request_id)
         if payload.review_note.strip():
             request_row.note = (request_row.note + "\n" + payload.review_note).strip()
         request_row.reviewed_by = user.id
@@ -171,6 +176,7 @@ def review_request(request_id: str, payload: SolutionRequestReview, request: Req
             contract_price_cents=payload.contract_price_cents,
             usage_price_cents=payload.usage_price_cents,
         )
+        record_change(db, tenant_id, user)
         db.commit()
         return {"request": model_dict(request_row), "service": model_dict(service)}
     request_row.status = payload.status

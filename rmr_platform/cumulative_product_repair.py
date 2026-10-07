@@ -268,6 +268,9 @@ def update_commercial_term(
 ):
     require_request_origin(request)
     _require_admin(user)
+    from .routes.billing import _lock_tenant
+    from .billing_renewals import record_change
+    _lock_tenant(db, tenant_id)
     if abs((payload.rmr_share_pct + payload.step2_share_pct) - 100.0) > 0.01:
         raise HTTPException(status_code=422, detail="RMR and Step2 shares must total 100%")
     tenant = db.get(Tenant, tenant_id)
@@ -329,6 +332,7 @@ def update_commercial_term(
             "after_commercial_term": _term_snapshot(term),
         },
     )
+    record_change(db, tenant_id, user)
     db.commit()
     return _commercial_view(tenant, subscription, catalog, term)
 

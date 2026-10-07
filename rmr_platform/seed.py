@@ -63,7 +63,7 @@ SERVICE_DEFINITIONS = [
     ("external_website_connection", "External Website Connection", "Website", 7500, "monthly", "subscription", 900, "gross", 50.0, 50.0),
     ("monthly_seo", "Monthly SEO", "Marketing", 75000, "monthly", "subscription", 26000, "net", 40.0, 60.0),
     ("piq_access", "ProspectIQ Monthly Access", "Intelligence", 17500, "monthly", "subscription", 2200, "net", 80.0, 20.0),
-    ("piq_enhancement", "ProspectIQ Record Enhancement", "Intelligence", 400, "usage", "record", 125, "net", 80.0, 20.0),
+    ("piq_enhancement", "ProspectIQ Record Enhancement", "Intelligence", 50, "usage", "record", 125, "net", 80.0, 20.0),
     ("training", "Training & Adoption Library", "Training", 10000, "monthly", "subscription", 800, "net", 50.0, 50.0),
     ("campaigns", "Campaigns & Content Operations", "Marketing", 29500, "monthly", "subscription", 6500, "net", 45.0, 55.0),
     ("private_reference", "Private RMR Reference Deployment", "Private", 0, "monthly", "subscription", 0, "gross", 100.0, 0.0),

@@ -100,6 +100,8 @@ def current_user(
             user._managed_tenant_id = session.tenant_id
             user._managed_session_id = session.id
             user._managed_access_type = session.access_type
+    from .billing_subscriptions import require_onboarding_access
+    require_onboarding_access(db, user, request)
     return user
 
 

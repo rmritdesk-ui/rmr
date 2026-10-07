@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import time
+import asyncio
+from contextlib import suppress
 import os
 from contextlib import asynccontextmanager
 from collections import defaultdict, deque
@@ -20,7 +22,7 @@ from .models import User
 from .seed import seed_demo, seed_reference_data
 from .unified_seed import seed_unified_demo
 from .security import current_user
-from .routes import auth, campaigns, crm, forecast, onboarding, piq, portfolio, services, setup, solutions, system, training, unified, website
+from .routes import auth, billing, campaigns, crm, forecast, onboarding, piq, portfolio, services, setup, solutions, system, training, unified, website
 from .tenant_themes import router as tenant_themes_router, seed_tenant_themes
 from . import client_admin_corrections, cumulative_product_repair, v53_experience, v531_final_corrections
 from . import piq_worker, cb1_worker
@@ -48,9 +50,14 @@ async def lifespan(_app: FastAPI):
     cb1_worker_enabled = os.getenv("RMR_CB1_WORKER_ENABLED", "true").lower() == "true"
     if cb1_worker_enabled:
         cb1_worker.start()
+    from .billing_renewals import run_reconciler
+    billing_task = asyncio.create_task(run_reconciler())
     try:
         yield
     finally:
+        billing_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await billing_task
         if piq_worker_started:
             piq_worker.stop()
         if cb1_worker_enabled:
@@ -97,7 +104,7 @@ async def security_and_rate_limit(request: Request, call_next):
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; "
-        "script-src 'self'; connect-src 'self'; frame-src 'self' https:; media-src 'self' https:;"
+        "script-src 'self' https://js.stripe.com https://*.js.stripe.com; connect-src 'self' https://api.stripe.com; frame-src 'self' https:; media-src 'self' https:;"
     )
     if path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
@@ -107,6 +114,8 @@ async def security_and_rate_limit(request: Request, call_next):
 for router in [
     setup.router,
     auth.router,
+    billing.router,
+    billing.webhook_router,
     portfolio.router,
     onboarding.router,
     services.router,

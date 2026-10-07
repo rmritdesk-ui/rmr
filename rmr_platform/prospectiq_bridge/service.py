@@ -66,7 +66,7 @@ def authorized_tenant(db, user, tenant_id, managed_id=None):
             require_client_operational_write(user, tenant_id)
     elif user.tenant_role not in CLIENT_ROLES:
         raise HTTPException(403, "Tenant role required")
-    _require_piq_access(db, tenant_id)
+    _require_piq_access(db, tenant_id, user)
     return managed
 
 

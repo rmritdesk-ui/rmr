@@ -11,3 +11,4 @@ alembic==1.18.4
 psycopg[binary]==3.2.9
 
 openpyxl==3.1.5
+stripe==16.0.0

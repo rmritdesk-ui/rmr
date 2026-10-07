@@ -14,6 +14,10 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _enabled_unless_explicitly_disabled(name: str) -> bool:
+    return os.getenv(name, "true").strip().lower() not in {"0", "false", "no", "off"}
+
+
 def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
     try:
         value = int(os.getenv(name, str(default)))
@@ -43,6 +47,8 @@ class Settings:
     session_hours: int
     base_url: str
     payment_provider: str
+    stripe_secret_key: str
+    stripe_publishable_key: str
     allow_demo_credentials: bool
     auto_migrate: bool
     auto_seed: bool
@@ -77,6 +83,11 @@ class Settings:
     prospectiq_authorization_code_ttl_seconds: int = 60
     prospectiq_assertion_audience: str = ""
     prospectiq_assertion_issuer: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_env: str = "test"
+    live_charging_enabled: bool = False
+    monthly_billing_enabled: bool = True
+    ar_billing_mode: str = "payment_required"
 
 
 def get_settings() -> Settings:
@@ -114,6 +125,15 @@ def get_settings() -> Settings:
         session_hours=int(os.getenv("RMR_SESSION_HOURS", "12")),
         base_url=os.getenv("RMR_BASE_URL", "http://localhost:8000").rstrip("/"),
         payment_provider=os.getenv("RMR_PAYMENT_PROVIDER", "mock").lower(),
+        stripe_secret_key=os.getenv("RMR_STRIPE_SECRET_KEY", "").strip(),
+        stripe_publishable_key=os.getenv("RMR_STRIPE_PUBLISHABLE_KEY", "").strip(),
+        stripe_webhook_secret=os.getenv("RMR_STRIPE_WEBHOOK_SECRET", "").strip(),
+        stripe_env=os.getenv("RMR_STRIPE_ENV", "test").strip().lower(),
+        live_charging_enabled=_env_bool("RMR_LIVE_CHARGING_ENABLED"),
+        monthly_billing_enabled=_enabled_unless_explicitly_disabled("RMR_MONTHLY_BILLING_ENABLED"),
+        ar_billing_mode=(os.getenv("RMR_AR_BILLING_MODE", "").strip().lower()
+                         if os.getenv("RMR_AR_BILLING_MODE", "").strip().lower() in {"track_only", "post_run"}
+                         else "payment_required"),
         allow_demo_credentials=os.getenv("RMR_ALLOW_DEMO_CREDENTIALS", "false").lower() == "true",
         auto_migrate=os.getenv("RMR_AUTO_MIGRATE", "true").lower() == "true",
         auto_seed=os.getenv("RMR_AUTO_SEED", "false").lower() == "true",

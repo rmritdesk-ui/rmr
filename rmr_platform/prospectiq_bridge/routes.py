@@ -19,8 +19,92 @@ from .history_copy import HistoryCopyRequest, copy_history
 from .contracts import MappingCheckRequest
 from .contracts import ProvisionRequest, ProvisionResponse
 from .contracts import CrmLeadRequest, CrmLeadResponse, ReceiptLookupRequest
+from .ar_billing import ResearchPurchase, PostRunFreeze, PostRunLink, PostRunSettlement
+from . import ar_billing
+from . import ar_usage_report
 
 router = APIRouter(prefix="/api/integrations/prospectiq/v1", tags=["ProspectIQ federation"])
+
+
+@router.get("/owner/adaptive-research/usage")
+def owner_research_usage(tenant_id: UUID | None = None, run_id: UUID | None = None,
+                         from_date: str | None = None, to_date: str | None = None,
+                         user=Depends(current_user), db: Session = Depends(get_db),
+                         cfg=Depends(bridge_config)):
+    ar_usage_report.owner_only(user)
+    return JSONResponse(ar_usage_report.report(db, cfg, tenant_id=str(tenant_id) if tenant_id else None,
+                        run_id=str(run_id) if run_id else None, from_date=from_date, to_date=to_date),
+                        headers={"Cache-Control": "no-store"})
+
+
+async def _research_purchase_request(request: Request, db: Session, cfg):
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > 8192:
+            raise HTTPException(413, "Research purchase request too large")
+    body = bytes(body)
+    service.authenticate_service(db, request.headers, body, request.method, request.url.path, cfg)
+    try:
+        return ResearchPurchase.model_validate_json(body)
+    except ValidationError:
+        raise HTTPException(422, "Invalid research purchase request") from None
+
+
+@router.post("/research-purchases/quote")
+async def research_purchase_quote(request: Request, db: Session = Depends(get_db), cfg=Depends(bridge_config)):
+    payload = await _research_purchase_request(request, db, cfg)
+    return JSONResponse(ar_billing.quote(db, payload, cfg), headers={"Cache-Control": "no-store"})
+
+
+@router.post("/research-purchases/charge")
+async def research_purchase_charge(request: Request, db: Session = Depends(get_db), cfg=Depends(bridge_config)):
+    payload = await _research_purchase_request(request, db, cfg)
+    return JSONResponse(ar_billing.charge(db, payload, cfg), headers={"Cache-Control": "no-store"})
+
+
+@router.post("/research-purchases/link-run")
+async def research_purchase_link_run(request: Request, db: Session = Depends(get_db), cfg=Depends(bridge_config)):
+    payload = await _research_purchase_request(request, db, cfg)
+    return JSONResponse(ar_billing.link_run(db, payload, cfg), headers={"Cache-Control": "no-store"})
+
+
+async def _post_run_request(request: Request, db: Session, cfg, model):
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > 8192:
+            raise HTTPException(413, "Research settlement request too large")
+    body = bytes(body)
+    service.authenticate_service(db, request.headers, body, request.method, request.url.path, cfg)
+    try:
+        return model.model_validate_json(body)
+    except ValidationError:
+        raise HTTPException(422, "Invalid research settlement request") from None
+
+
+@router.post("/research-settlements/freeze")
+async def research_settlement_freeze(request: Request, db: Session = Depends(get_db), cfg=Depends(bridge_config)):
+    payload = await _post_run_request(request, db, cfg, PostRunFreeze)
+    return JSONResponse(ar_billing.freeze_post_run(db, payload, cfg), headers={"Cache-Control": "no-store"})
+
+
+@router.post("/research-settlements/settle")
+async def research_settlement_settle(request: Request, db: Session = Depends(get_db), cfg=Depends(bridge_config)):
+    payload = await _post_run_request(request, db, cfg, PostRunSettlement)
+    return JSONResponse(ar_billing.settle_post_run(db, payload), headers={"Cache-Control": "no-store"})
+
+
+@router.post("/research-settlements/link-run")
+async def research_settlement_link(request: Request, db: Session = Depends(get_db), cfg=Depends(bridge_config)):
+    payload = await _post_run_request(request, db, cfg, PostRunLink)
+    return JSONResponse(ar_billing.link_post_run(db, payload), headers={"Cache-Control": "no-store"})
+
+
+@router.post("/research-settlements/retry")
+async def research_settlement_retry(request: Request, db: Session = Depends(get_db), cfg=Depends(bridge_config)):
+    payload = await _post_run_request(request, db, cfg, PostRunSettlement)
+    return JSONResponse(ar_billing.retry_post_run(db, payload), headers={"Cache-Control": "no-store"})
 
 
 @router.get("/health")

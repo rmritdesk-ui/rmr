@@ -23,6 +23,7 @@ export async function api(path, options = {}) {
     body: options.body instanceof FormData ? options.body : options.body !== undefined ? JSON.stringify(options.body) : undefined
   });
   if (response.status === 401) window.dispatchEvent(new CustomEvent('rmr:unauthorized'));
+  if (response.status === 402) window.dispatchEvent(new CustomEvent('rmr:billing-required'));
   const contentType = response.headers.get('content-type') || '';
   const data = contentType.includes('application/json') ? await response.json() : await response.text();
   if (!response.ok) {

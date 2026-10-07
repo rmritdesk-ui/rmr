@@ -65,10 +65,13 @@ def _cb1_dict(row: Any) -> dict[str, Any]:
     return data
 
 
-def _require_service(db: Session, tenant_id: str, *codes: str) -> None:
+def _require_service(db: Session, tenant_id: str, *codes: str, user=None) -> None:
     active = active_service_codes(db, tenant_id)
     if not any(code in active for code in codes):
         raise HTTPException(status_code=403, detail=f"This module is not active for the client. Required service: {', '.join(codes)}")
+    if "piq_access" in codes:
+        from ..billing_subscriptions import require_paid_service
+        require_paid_service(db, tenant_id, "piq_access", user)
 
 
 def _actor_name(user: User) -> str:
@@ -307,14 +310,14 @@ def public_appointment(site_slug: str, payload: AppointmentIn, request: Request,
 
 @router.get("/tenants/{tenant_id}/piq/target-profile")
 def get_target(tenant_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    require_tenant_access(user, tenant_id); _require_service(db, tenant_id, "piq_access")
+    require_tenant_access(user, tenant_id); _require_service(db, tenant_id, "piq_access", user=user)
     row = profile_for(db, tenant_id)
     return {"profile": model_dict(row) if row else None}
 
 
 @router.put("/tenants/{tenant_id}/piq/target-profile")
 def save_target(tenant_id: str, payload: TargetProfileIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    require_request_origin(request); require_client_operational_write(user, tenant_id); _require_service(db, tenant_id, "piq_access")
+    require_request_origin(request); require_client_operational_write(user, tenant_id); _require_service(db, tenant_id, "piq_access", user=user)
     row = profile_for(db, tenant_id)
     if not row:
         row = PiqTargetProfile(tenant_id=tenant_id, created_by=user.id); db.add(row)
@@ -337,7 +340,7 @@ DEMO_COMPANIES = [
 
 @router.post("/tenants/{tenant_id}/piq/discover")
 def discover(tenant_id: str, payload: DiscoverIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    require_request_origin(request); require_client_operational_write(user, tenant_id); _require_service(db, tenant_id, "piq_access")
+    require_request_origin(request); require_client_operational_write(user, tenant_id); _require_service(db, tenant_id, "piq_access", user=user)
     profile = profile_for(db, tenant_id, payload.target_profile_id, active=True)
     if not profile: raise HTTPException(status_code=400, detail="Create a target profile before running discovery")
     if settings.piq_live_discovery_enabled:
@@ -437,7 +440,7 @@ def discover(tenant_id: str, payload: DiscoverIn, request: Request, user: User =
 @router.get("/tenants/{tenant_id}/piq/discovery-runs/active")
 def active_discovery_run(tenant_id: str, user: User = Depends(current_user), db: Session = Depends(get_db), target_profile_id: str | None = None):
     require_tenant_access(user, tenant_id)
-    _require_service(db, tenant_id, "piq_access")
+    _require_service(db, tenant_id, "piq_access", user=user)
     run = db.scalar(select(PiqDiscoveryRun).where(
         PiqDiscoveryRun.tenant_id == tenant_id,
         PiqDiscoveryRun.provider == "google_places",
@@ -449,7 +452,7 @@ def active_discovery_run(tenant_id: str, user: User = Depends(current_user), db:
 
 @router.get("/tenants/{tenant_id}/piq/discovery-runs/{run_id}")
 def discovery_run_status(tenant_id: str, run_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    require_tenant_access(user, tenant_id); _require_service(db, tenant_id, "piq_access")
+    require_tenant_access(user, tenant_id); _require_service(db, tenant_id, "piq_access", user=user)
     run = db.scalar(select(PiqDiscoveryRun).where(
         PiqDiscoveryRun.id == run_id,
         PiqDiscoveryRun.tenant_id == tenant_id,
@@ -480,7 +483,7 @@ def discovery_run_status(tenant_id: str, run_id: str, user: User = Depends(curre
 
 @router.post("/tenants/{tenant_id}/piq/import-preview")
 def piq_import_preview(tenant_id: str, payload: ImportRowsIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    require_request_origin(request); require_client_operational_write(user, tenant_id); _require_service(db, tenant_id, "piq_access")
+    require_request_origin(request); require_client_operational_write(user, tenant_id); _require_service(db, tenant_id, "piq_access", user=user)
     existing={x.lower() for x in db.scalars(select(PiqOpportunity.company_name).where(PiqOpportunity.tenant_id==tenant_id))}
     preview=[]; duplicates=errors=0
     for index,row in enumerate(payload.rows,1):
@@ -495,7 +498,7 @@ def piq_import_preview(tenant_id: str, payload: ImportRowsIn, request: Request, 
 
 @router.post("/tenants/{tenant_id}/piq/import")
 def piq_import_commit(tenant_id: str, payload: ImportRowsIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    require_request_origin(request); require_client_operational_write(user, tenant_id); _require_service(db, tenant_id, "piq_access")
+    require_request_origin(request); require_client_operational_write(user, tenant_id); _require_service(db, tenant_id, "piq_access", user=user)
     batch=db.get(PiqImportBatch,payload.batch_id) if payload.batch_id else None
     rows=batch.preview_json if batch else payload.rows
     created=[]
@@ -550,7 +553,7 @@ def adaptive_research(opportunity_id: str, request: Request, user: User = Depend
         return JSONResponse(result, status_code=202)
     row=db.get(PiqOpportunity,opportunity_id)
     if not row: raise HTTPException(status_code=404,detail="ProspectIQ record not found")
-    require_client_operational_write(user,row.tenant_id); _require_service(db,row.tenant_id,"piq_access")
+    require_client_operational_write(user,row.tenant_id); _require_service(db,row.tenant_id,"piq_access", user=user)
     facts=[
         f"Recent public signals support the existing opportunity summary for {row.company_name}.",
         "The organization shows evidence of active growth or customer-acquisition investment.",

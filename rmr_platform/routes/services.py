@@ -186,15 +186,22 @@ def add_tenant_service(
     )
     if existing:
         raise HTTPException(status_code=409, detail="This service is already on the client schedule")
+    from .billing import _lock_tenant
+    from ..billing_renewals import record_change
+    _lock_tenant(db, tenant_id)
+    if db.scalar(select(TenantService).where(TenantService.tenant_id == tenant_id,
+                                            TenantService.service_code == payload.service_code)):
+        raise HTTPException(409, "This service is already on the client schedule")
     service = TenantService(
         tenant_id=tenant_id,
         service_code=payload.service_code,
-        contract_price_cents=payload.contract_price_cents,
-        usage_price_cents=payload.usage_price_cents,
-        cadence=payload.cadence or catalog.cadence,
+        contract_price_cents=0 if catalog.cadence == "usage" else payload.contract_price_cents,
+        usage_price_cents=(payload.usage_price_cents or payload.contract_price_cents)
+            if catalog.cadence == "usage" else payload.usage_price_cents,
+        cadence=catalog.cadence if catalog.cadence == "usage" else (payload.cadence or catalog.cadence),
         status="active",
         effective_date=payload.effective_date or date.today(),
-        next_billing_date=date.today() + timedelta(days=30),
+        next_billing_date=None if catalog.cadence == "usage" else date.today() + timedelta(days=30),
         notes=payload.notes,
     )
     db.add(service)
@@ -208,6 +215,7 @@ def add_tenant_service(
         entity_id=service.id,
         data={"service_code": service.service_code, "contract_price_cents": service.contract_price_cents},
     )
+    record_change(db, tenant_id, user)
     db.commit()
     return {"service": model_dict(service)}
 
@@ -225,6 +233,14 @@ def update_tenant_service(
     service = db.get(TenantService, service_id)
     if not service:
         raise HTTPException(status_code=404, detail="Client service not found")
+    from .billing import _lock_tenant
+    from ..billing_renewals import record_change
+    tenant_id = service.tenant_id
+    _lock_tenant(db, tenant_id)
+    service = db.get(TenantService, service_id)
+    catalog = db.scalar(select(ServiceCatalog).where(ServiceCatalog.code == service.service_code))
+    if catalog and catalog.cadence == "usage" and payload.cadence not in (None, "usage"):
+        raise HTTPException(422, "Usage service cadence cannot become monthly")
     for field in ["contract_price_cents", "usage_price_cents", "cadence", "status", "notes"]:
         value = getattr(payload, field)
         if value is not None:
@@ -238,6 +254,7 @@ def update_tenant_service(
         entity_id=service.id,
         data=payload.model_dump(exclude_none=True),
     )
+    record_change(db, tenant_id, user)
     db.commit()
     return {"service": model_dict(service)}
 
