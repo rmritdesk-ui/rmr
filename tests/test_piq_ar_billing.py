@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from stripe import StripeError
 
 from rmr_platform.billing_subscriptions import quote as monthly_quote
+from rmr_platform import billing_policy
 from rmr_platform.models import Tenant, ServiceCatalog, TenantService, TenantBillingProfile, BillingOperation
 from rmr_platform.prospectiq_bridge import ar_billing
 
@@ -52,7 +53,8 @@ class ResearchPurchaseTests(unittest.TestCase):
         })
 
     def test_track_only_rejects_purchase_and_never_calls_stripe(self):
-        with patch.object(ar_billing, 'settings', NS(ar_billing_mode='track_only')):
+        with patch.object(ar_billing, 'settings', NS(ar_billing_mode='track_only')), patch.object(
+                billing_policy, 'settings', NS(ar_billing_mode='track_only', monthly_billing_enabled=False)):
             for action in (ar_billing.quote, ar_billing.charge):
                 with self.assertRaises(HTTPException) as error:
                     action(self.db, self.payload, NS())

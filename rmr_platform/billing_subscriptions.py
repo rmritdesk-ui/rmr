@@ -9,6 +9,7 @@ from sqlalchemy import select
 from .models import BillingOperation, BillingSubscription, ServiceCatalog, TenantService
 from .permissions import CLIENT_ROLES, is_global_admin
 from .config import settings
+from .billing_policy import effective_billing_policy
 
 
 def monthly_billing_enabled():
@@ -64,6 +65,8 @@ def onboarding_required(db, user):
         return False
     if is_global_admin(user) or not user.tenant_id or user.tenant_role not in CLIENT_ROLES:
         return False
+    if not effective_billing_policy(db, user.tenant_id)["monthly_billing_required"]:
+        return False
     from .routes.billing import _stripe_mode
     row = subscription(db, user.tenant_id, _stripe_mode())
     return bool((quote(db, user.tenant_id)["services"] or (row and row.monthly_amount_cents)) and not paid(row))
@@ -90,7 +93,7 @@ def require_onboarding_access(db, user, request):
 
 
 def require_paid_service(db, tenant_id, service_code, user=None):
-    if not monthly_billing_enabled():
+    if not effective_billing_policy(db, tenant_id)["monthly_billing_required"]:
         return
     if user and is_global_admin(user):
         return
@@ -107,6 +110,7 @@ def require_paid_service(db, tenant_id, service_code, user=None):
 
 
 def summary(db, tenant_id, mode, profile):
+    policy = effective_billing_policy(db, tenant_id)
     current = quote(db, tenant_id)
     row = subscription(db, tenant_id, mode)
     active = paid(row)
@@ -128,7 +132,9 @@ def summary(db, tenant_id, mode, profile):
             upcoming['effective_at'] = int((end if end.tzinfo else end.replace(tzinfo=timezone.utc)).timestamp())
         upcoming['effective_date'] = (datetime.fromtimestamp(upcoming['effective_at'], timezone.utc).date().isoformat()
                                       if upcoming['effective_at'] is not None else None)
-    return {**current, "stage": stage, "billing_required": bool(monthly_billing_enabled() and
+    if policy["billing_exempt"]:
+        stage = "billing_exempt"
+    return {**current, "stage": stage, "billing_required": bool(policy["monthly_billing_required"] and
             (current["services"] or (row and row.monthly_amount_cents)) and not active),
             'next_cycle': upcoming,
             "subscription": None if not row else {

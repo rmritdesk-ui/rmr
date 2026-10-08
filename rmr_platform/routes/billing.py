@@ -15,6 +15,7 @@ from ..config import settings
 from ..db import get_db
 from ..models import AuditEvent, BillingOperation, BillingSubscription, BillingServicePrice, Tenant, TenantBillingProfile, TenantLiveBillingProfile, User
 from .. import billing_subscriptions as monthly
+from ..billing_policy import effective_billing_policy, require_billing_allowed
 from ..permissions import is_global_admin, require_tenant_access
 from ..security import current_user, require_request_origin
 from ..services import audit
@@ -137,11 +138,13 @@ def prepare_operation(kind: str, tenant_id: str, payload: PrepareOperation, requ
     require_request_origin(request)
     require_tenant_access(user, tenant_id)
     _require_billing_write(user, tenant_id)
+    require_billing_allowed(db, tenant_id)
     _stripe_client()  # Validate configuration without a provider call.
     mode = _stripe_mode()
     if kind not in {"setup", "subscription"} or (kind == "subscription" and not monthly.monthly_billing_enabled()):
         raise HTTPException(status_code=403, detail="Billing operation is unavailable.")
     _lock_tenant(db, tenant_id)
+    require_billing_allowed(db, tenant_id)
     slot = f"{tenant_id}:{mode}:{kind}"
     op = db.scalar(select(BillingOperation).where(BillingOperation.active_slot == slot))
     if kind != "subscription" and op and payload.previous_operation_id == op.id and op.result_data is not None:
@@ -157,6 +160,7 @@ def prepare_operation(kind: str, tenant_id: str, payload: PrepareOperation, requ
 
 def _operation(db: Session, tenant_id: str, kind: str, operation_id: str) -> BillingOperation:
     _lock_tenant(db, tenant_id)
+    require_billing_allowed(db, tenant_id)
     op = db.get(BillingOperation, operation_id)
     if not op or op.tenant_id != tenant_id or op.kind != kind or op.mode != _stripe_mode():
         raise HTTPException(status_code=409, detail="Prepare a valid billing operation first.")
@@ -288,6 +292,7 @@ def billing_status(
     require_tenant_access(user, tenant_id)
     tenant = _tenant_or_404(db, tenant_id)
     profile = _profile(db, tenant_id)
+    policy = effective_billing_policy(db, tenant_id)
 
     return {
         "tenant": {
@@ -296,11 +301,53 @@ def billing_status(
         },
         "provider": settings.payment_provider,
         "stripe_configured": _stripe_mode() is not None,
+        "effective_billing": policy,
         "can_manage": _can_manage_billing(user, tenant_id),
         "monthly": monthly.summary(db, tenant_id, _stripe_mode(), profile),
-        "subscription_activation_available": monthly.monthly_billing_enabled() and _stripe_mode() is not None and _can_manage_billing(user, tenant_id),
+        "subscription_activation_available": policy["monthly_billing_required"] and _stripe_mode() is not None and _can_manage_billing(user, tenant_id),
         **_serialize_profile(profile),
     }
+
+
+class BillingExemptionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    billing_exempt: StrictBool
+
+
+@router.patch("/exemption")
+def update_billing_exemption(tenant_id: str, payload: BillingExemptionUpdate,
+                             request: Request, user: User = Depends(current_user),
+                             db: Session = Depends(get_db)):
+    require_request_origin(request)
+    if not is_global_admin(user):
+        raise HTTPException(403, "RMR Owner/Admin access required.")
+    _lock_tenant(db, tenant_id)
+    _tenant_or_404(db, tenant_id)
+    existing = db.scalar(select(TenantBillingProfile).where(TenantBillingProfile.tenant_id == tenant_id))
+    if payload.billing_exempt and not (existing and existing.billing_exempt):
+        # A local flag cannot cancel an external subscription or uncertain Stripe write.
+        rows = list(db.scalars(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant_id)))
+        if any(row.status not in {"canceled", "incomplete_expired"} for row in rows):
+            raise HTTPException(409, "Resolve the client's existing Stripe subscription before enabling billing exemption.")
+        operations = list(db.scalars(select(BillingOperation).where(
+            BillingOperation.tenant_id == tenant_id, BillingOperation.active_slot.is_not(None))))
+        safe = {"paid", "succeeded", "below_minimum", "no_auto_charge", "canceled", "applied"}
+        if any(op.kind in {"setup", "subscription", "renewal", "piq_ar", "piq_ar_post_run"}
+               and (op.result_data or {}).get("status", (op.result_data or {}).get("state")) not in safe
+               for op in operations):
+            raise HTTPException(409, "Resolve the client's pending Stripe billing operation before enabling exemption.")
+    profile = existing or TenantBillingProfile(tenant_id=tenant_id)
+    if not existing:
+        db.add(profile)
+    previous = bool(existing.billing_exempt) if existing else False
+    profile.billing_exempt = payload.billing_exempt
+    db.flush()
+    if previous != payload.billing_exempt:
+        audit(db, user, "billing.exemption_changed", tenant_id=tenant_id,
+              entity_type="tenant_billing_profile", entity_id=profile.id,
+              data={"previous": previous, "billing_exempt": payload.billing_exempt})
+    db.commit()
+    return {"effective_billing": effective_billing_policy(db, tenant_id)}
 
 
 @router.post("/setup-intent")
@@ -314,6 +361,7 @@ def create_setup_intent(
     require_request_origin(request)
     require_tenant_access(user, tenant_id)
     _require_billing_write(user, tenant_id)
+    require_billing_allowed(db, tenant_id)
 
     client = _stripe_client()
     op = _operation(db, tenant_id, "setup", payload.operation_id)
@@ -410,6 +458,7 @@ def complete_payment_method(
     require_request_origin(request)
     require_tenant_access(user, tenant_id)
     _require_billing_write(user, tenant_id)
+    require_billing_allowed(db, tenant_id)
 
     tenant = _tenant_or_404(db, tenant_id)
     profile = _profile(db, tenant_id)
@@ -430,6 +479,7 @@ def _complete_setup_intent(
     tenant_id = profile.tenant_id
     client = _stripe_client()
     _lock_tenant(db, tenant_id)
+    require_billing_allowed(db, tenant_id)
     profile = _profile(db, tenant_id)
 
     try:
@@ -710,6 +760,7 @@ def activate_subscription(tenant_id: str, payload: ActivateSubscription, request
     require_request_origin(request)
     require_tenant_access(user, tenant_id)
     _require_billing_write(user, tenant_id)
+    require_billing_allowed(db, tenant_id)
     client = _sandbox_subscriptions()
     if not payload.confirmed:
         raise HTTPException(400, "Explicit monthly billing authorization is required.")
@@ -771,8 +822,10 @@ def refresh_subscription(tenant_id: str, request: Request, user: User = Depends(
     require_request_origin(request)
     require_tenant_access(user, tenant_id)
     _require_billing_write(user, tenant_id)
+    require_billing_allowed(db, tenant_id)
     client = _sandbox_subscriptions()
     _lock_tenant(db, tenant_id)
+    require_billing_allowed(db, tenant_id)
     row = monthly.subscription(db, tenant_id, _stripe_mode())
     if not row or not row.stripe_subscription_id:
         raise HTTPException(409, "Retry the existing activation to finish preparing the subscription.")

@@ -21,6 +21,7 @@ from .contracts import ProvisionRequest, ProvisionResponse
 from .contracts import CrmLeadRequest, CrmLeadResponse, ReceiptLookupRequest
 from .ar_billing import ResearchPurchase, PostRunFreeze, PostRunLink, PostRunSettlement
 from . import ar_billing
+from ..billing_policy import effective_billing_policy
 from . import ar_usage_report
 
 router = APIRouter(prefix="/api/integrations/prospectiq/v1", tags=["ProspectIQ federation"])
@@ -49,6 +50,17 @@ async def _research_purchase_request(request: Request, db: Session, cfg):
         return ResearchPurchase.model_validate_json(body)
     except ValidationError:
         raise HTTPException(422, "Invalid research purchase request") from None
+
+
+@router.post("/research-billing-policy")
+async def research_billing_policy(request: Request, db: Session = Depends(get_db), cfg=Depends(bridge_config)):
+    payload = await _research_purchase_request(request, db, cfg)
+    ar_billing._context(db, payload, cfg)
+    policy = effective_billing_policy(db, str(payload.rmr_tenant_id))
+    return JSONResponse({"billing_exempt": policy["billing_exempt"],
+                         "ar_billing_mode": policy["ar_billing_mode"],
+                         "ar_chargeable": policy["ar_chargeable"]},
+                        headers={"Cache-Control": "no-store"})
 
 
 @router.post("/research-purchases/quote")

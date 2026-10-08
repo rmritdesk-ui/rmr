@@ -20,6 +20,7 @@ from stripe import StripeObject, StripeError
 
 from rmr_platform import billing_subscriptions as monthly
 from rmr_platform import billing_renewals
+from rmr_platform import billing_policy
 from rmr_platform.config import _enabled_unless_explicitly_disabled
 from rmr_platform.models import (Tenant, User, TenantService, ServiceCatalog, TenantBillingProfile, TenantLiveBillingProfile,
     BillingOperation, BillingSubscription, BillingServicePrice, AuditEvent)
@@ -92,7 +93,8 @@ class MonthlyTests(unittest.TestCase):
         self.profile.default_payment_method_id = None
         self.profile.setup_status = 'not_configured'
         self.db.commit()
-        with patch.object(monthly, 'settings', NS(monthly_billing_enabled=False)):
+        with patch.object(monthly, 'settings', NS(monthly_billing_enabled=False)), patch.object(
+                billing_policy, 'settings', NS(monthly_billing_enabled=False, ar_billing_mode='track_only')):
             self.assertFalse(monthly.onboarding_required(self.db, self.user))
             monthly.require_paid_service(self.db, 'tenant', 'piq_access', self.user)
             path_request = Request({'type': 'http', 'method': 'GET',

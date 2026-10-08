@@ -353,6 +353,11 @@ export async function renderBillingPage(ctx) {
     if (!isCurrent()) return;
     if (data.tenant?.id !== tenantId) throw new Error("Billing response does not match the current client. Reload Billing & Payments.");
     syncBillingNavigation(data);
+    if (data.effective_billing?.billing_exempt) {
+      page.innerHTML = `${pageHead("Billing & Payments", "Billing is disabled for this client.")}
+        <section class="card"><h2>Billing Exempt</h2><p>This client is not required to add a payment method and cannot be charged while billing exemption is enabled.</p><p>Adaptive Research usage and actual provider costs continue to be tracked.</p></section>`;
+      return;
+    }
     const ready = data.setup_status === "ready" && data.payment_method;
 
     page.innerHTML = `

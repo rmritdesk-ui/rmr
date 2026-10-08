@@ -75,6 +75,9 @@ def pending(db, tenant_id, mode='test'):
 
 def record_change(db, tenant_id, actor=None):
     """Caller holds tenant lock; queue in the same transaction as assignment save."""
+    from .billing_policy import effective_billing_policy
+    if not effective_billing_policy(db, tenant_id)["monthly_billing_required"]:
+        return
     from .routes.billing import _stripe_mode
     mode = _stripe_mode()
     if mode not in {'test', 'live'}:
@@ -131,10 +134,16 @@ def sync_current_items(db, row, remote_items):
 
 
 def reconcile(db, tenant_id):
+    from .billing_policy import effective_billing_policy
+    if not effective_billing_policy(db, tenant_id)["monthly_billing_required"]:
+        return
     from .routes import billing as b
     client = b._sandbox_subscriptions()
     mode = b._stripe_mode()
     b._lock_tenant(db, tenant_id)
+    if not effective_billing_policy(db, tenant_id)["monthly_billing_required"]:
+        db.rollback()
+        return
     row = monthly.subscription(db, tenant_id, mode)
     op = pending(db, tenant_id, mode)
     if not row or not op or not row.stripe_subscription_id:

@@ -16,6 +16,7 @@ from stripe import StripeError
 
 from ..models import BillingOperation, TenantService
 from ..config import settings
+from ..billing_policy import effective_billing_policy, require_billing_allowed
 from ..routes.billing import _lock_tenant, _stripe_client, _stripe_mode, _log_stripe_error, _profile
 from .models import ProspectiqAuthorizationGrant as Grant
 from . import service
@@ -121,7 +122,7 @@ def _quote_hash(op):
 
 
 def quote(db, payload, cfg):
-    if settings.ar_billing_mode == "track_only":
+    if effective_billing_policy(db, str(payload.rmr_tenant_id))["ar_billing_mode"] == "track_only":
         raise HTTPException(403, "Adaptive Research purchases are disabled")
     mode = _stripe_mode()
     if mode == "live":
@@ -129,6 +130,7 @@ def quote(db, payload, cfg):
     if not mode:
         raise HTTPException(503, "RMR Stripe billing unavailable")
     _lock_tenant(db, str(payload.rmr_tenant_id))
+    require_billing_allowed(db, str(payload.rmr_tenant_id))
     _context(db, payload, cfg)
     assignment = db.scalar(select(TenantService).where(
         TenantService.tenant_id == str(payload.rmr_tenant_id),
@@ -189,11 +191,12 @@ def _operation(db, payload, cfg):
 
 
 def charge(db, payload, cfg):
-    if settings.ar_billing_mode == "track_only":
+    if effective_billing_policy(db, str(payload.rmr_tenant_id))["ar_billing_mode"] == "track_only":
         raise HTTPException(403, "Adaptive Research purchases are disabled")
     if _stripe_mode() == "live":
         raise HTTPException(403, "Legacy prepayment is not enabled for live research billing")
     op = _operation(db, payload, cfg)
+    require_billing_allowed(db, op.tenant_id)
     if not payload.approved or not payload.approved_quote_hash or not hmac.compare_digest(
             payload.approved_quote_hash, _quote_hash(op)):
         raise HTTPException(403, "Explicit approval of the frozen customer charge is required")
@@ -278,6 +281,7 @@ def freeze_post_run(db, payload: PostRunFreeze, cfg):
     if payload.estimate_min_cents_per_record > payload.estimate_max_cents_per_record:
         raise HTTPException(422, "Invalid research estimate range")
     _lock_tenant(db, str(payload.rmr_tenant_id))
+    require_billing_allowed(db, str(payload.rmr_tenant_id))
     _context(db, payload, cfg)
     slot = "arpost:" + payload.confirmation_hash
     prior = db.scalar(select(BillingOperation).where(BillingOperation.active_slot == slot))
@@ -329,6 +333,7 @@ def link_post_run(db, payload: PostRunLink):
     if settings.ar_billing_mode != "post_run" or _stripe_mode() not in {"test", "live"}:
         raise HTTPException(403, "Post-run research settlement is not enabled")
     op = _post_run_operation(db, payload)
+    require_billing_allowed(db, op.tenant_id)
     result = dict(op.result_data or {})
     result["piq_run_id"] = str(payload.piq_run_id)
     result["run_linked_at"] = result.get("run_linked_at") or datetime.now(timezone.utc).isoformat()
@@ -392,6 +397,9 @@ def _sync_post_run_intent(db, op, intent):
 
 
 def _pay_post_run(db, op):
+    _lock_tenant(db, op.tenant_id)
+    require_billing_allowed(db, op.tenant_id)
+    op = db.get(BillingOperation, op.id)
     result = dict(op.result_data or {})
     if result.get("status") in {"paid", "payment_failed", "below_minimum", "reconciliation_required"}:
         return _post_run_present(op)
@@ -457,6 +465,7 @@ def settle_post_run(db, payload: PostRunSettlement):
     if settings.ar_billing_mode != "post_run" or _stripe_mode() not in {"test", "live"}:
         raise HTTPException(403, "Post-run research settlement is not enabled")
     op = _post_run_operation(db, payload)
+    require_billing_allowed(db, op.tenant_id)
     result = dict(op.result_data or {})
     result["piq_run_id"] = str(payload.piq_run_id)
     if payload.run_status != "completed":
@@ -494,6 +503,7 @@ def retry_post_run(db, payload: PostRunSettlement):
     if settings.ar_billing_mode != "post_run" or _stripe_mode() not in {"test", "live"}:
         raise HTTPException(403, "Post-run research settlement is not enabled")
     op = _post_run_operation(db, payload)
+    require_billing_allowed(db, op.tenant_id)
     result = dict(op.result_data or {})
     if (result.get("piq_run_id") != str(payload.piq_run_id)
             or result.get("run_status") != "completed"

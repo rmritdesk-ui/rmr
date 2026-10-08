@@ -48,7 +48,8 @@ BILLING_FOUNDATION_VERSION = "005.013.000-stripe-billing-foundation"
 BILLING_OPERATIONS_VERSION = "005.014.000-billing-operations"
 MONTHLY_BILLING_VERSION = "005.015.000-monthly-billing"
 STRIPE_LIVE_ISOLATION_VERSION = "005.016.000-stripe-live-isolation"
-MIGRATION_VERSION = STRIPE_LIVE_ISOLATION_VERSION
+BILLING_EXEMPTION_VERSION = "005.017.000-tenant-billing-exemption"
+MIGRATION_VERSION = BILLING_EXEMPTION_VERSION
 
 
 
@@ -472,6 +473,11 @@ def apply_stripe_live_isolation_schema(*, bind=engine) -> None:
     TenantLiveBillingProfile.__table__.create(bind=bind, checkfirst=True)
 
 
+def apply_billing_exemption_schema(*, bind=engine) -> None:
+    _add_column_if_missing("tenant_billing_profiles", "billing_exempt",
+                           "billing_exempt BOOLEAN NOT NULL DEFAULT FALSE", bind=bind)
+
+
 MIGRATIONS: list[tuple[str, Callable[[], None]]] = [
 
     (FUNCTIONAL_EXPERIENCE_VERSION, _migration_005_001_000),
@@ -502,6 +508,7 @@ MIGRATIONS: list[tuple[str, Callable[[], None]]] = [
     (BILLING_OPERATIONS_VERSION, apply_billing_operations_schema),
     (MONTHLY_BILLING_VERSION, apply_monthly_billing_schema),
     (STRIPE_LIVE_ISOLATION_VERSION, apply_stripe_live_isolation_schema),
+    (BILLING_EXEMPTION_VERSION, apply_billing_exemption_schema),
 
 ]
 

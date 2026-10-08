@@ -83,6 +83,19 @@ class PostRunSettlementTests(unittest.TestCase):
         self.assertEqual(ar_billing.settle_post_run(self.db, self.settlement(frozen))["status"], "paid")
         self.assertEqual(self.stripe.v1.payment_intents.create.call_count, 1)
 
+    def test_exemption_blocks_new_freeze_and_any_later_settlement_retry(self):
+        frozen = self.frozen()
+        profile = self.db.query(TenantBillingProfile).filter_by(tenant_id=self.tenant).one()
+        profile.billing_exempt = True
+        self.db.commit()
+        with self.assertRaises(HTTPException) as blocked:
+            self.frozen()
+        self.assertEqual(blocked.exception.status_code, 403)
+        with self.assertRaises(HTTPException) as blocked:
+            ar_billing.settle_post_run(self.db, self.settlement(frozen))
+        self.assertEqual(blocked.exception.status_code, 403)
+        self.stripe.v1.payment_intents.create.assert_not_called()
+
     def test_pending_cost_failed_run_and_below_minimum_do_not_charge(self):
         frozen = self.frozen()
         self.assertEqual(ar_billing.settle_post_run(self.db,

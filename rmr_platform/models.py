@@ -744,6 +744,8 @@ class TenantBillingProfile(Base):
         nullable=False,
     )
 
+    billing_exempt: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+
     provider: Mapped[str] = mapped_column(
         String(30),
         default="stripe",
