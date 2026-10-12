@@ -17,7 +17,7 @@ from ..unified_models import PiqEvidence
 router = APIRouter(prefix="/api", tags=["piq"])
 
 
-def _require_piq_access(db: Session, tenant_id: str) -> tuple[TenantService, TenantService]:
+def _require_piq_access(db: Session, tenant_id: str, user=None) -> tuple[TenantService, TenantService]:
     access = db.scalar(select(TenantService).where(
         TenantService.tenant_id == tenant_id,
         TenantService.service_code == "piq_access",
@@ -30,13 +30,15 @@ def _require_piq_access(db: Session, tenant_id: str) -> tuple[TenantService, Ten
     ))
     if not access or not enhancement:
         raise HTTPException(status_code=403, detail="ProspectIQ is not active for this client")
+    from ..billing_subscriptions import require_paid_service
+    require_paid_service(db, tenant_id, "piq_access", user)
     return access, enhancement
 
 
 @router.get("/tenants/{tenant_id}/piq")
 def list_piq(tenant_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
     require_tenant_access(user, tenant_id)
-    _require_piq_access(db, tenant_id)
+    _require_piq_access(db, tenant_id, user)
     rows = list(db.scalars(select(PiqOpportunity).where(PiqOpportunity.tenant_id == tenant_id).order_by(PiqOpportunity.score.desc())))
     return {
         "opportunities": [model_dict(row) for row in rows],
@@ -53,7 +55,7 @@ def enhance_piq(opportunity_id: str, payload: PiqEnhanceRequest, request: Reques
     if not opportunity:
         raise HTTPException(status_code=404, detail="ProspectIQ opportunity not found")
     require_client_operational_write(user, opportunity.tenant_id)
-    _, enhancement_service = _require_piq_access(db, opportunity.tenant_id)
+    _, enhancement_service = _require_piq_access(db, opportunity.tenant_id, user)
     if opportunity.enhanced:
         return {"opportunity": model_dict(opportunity), "charged": False, "message": "This profile is already enhanced"}
     if not payload.payment_confirmation:
@@ -94,7 +96,7 @@ def move_piq_to_crm(opportunity_id: str, request: Request, user: User = Depends(
     if not opportunity:
         raise HTTPException(status_code=404, detail="ProspectIQ opportunity not found")
     require_client_operational_write(user, opportunity.tenant_id)
-    _require_piq_access(db, opportunity.tenant_id)
+    _require_piq_access(db, opportunity.tenant_id, user)
     if opportunity.moved_to_crm:
         return {"opportunity": model_dict(opportunity), "created": False}
     tenant_id = opportunity.tenant_id
