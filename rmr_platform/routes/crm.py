@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
+from typing import Literal
+from uuid import UUID
+from pydantic import BaseModel, Field
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select, update
@@ -32,6 +36,89 @@ from ..services import audit
 from ..utils import model_dict
 
 router = APIRouter(prefix="/api", tags=["crm"])
+
+
+def _outreach_context(db, user, prospect_id):
+    prospect = db.scalar(select(CrmProspect).where(CrmProspect.id == prospect_id).with_for_update())
+    if not prospect:
+        raise HTTPException(404, "Prospect not found")
+    require_client_operational_write(user, prospect.tenant_id)
+    account = db.get(Account, prospect.account_id)
+    lead = db.get(Lead, prospect.source_lead_id)
+    if not account or not lead or account.tenant_id != prospect.tenant_id or lead.tenant_id != prospect.tenant_id:
+        raise HTTPException(404, "Prospect relationship unavailable")
+    _require_account_scope(user, account, db)
+    if prospect.stage != "Prospecting" or db.scalar(select(Opportunity.id).where(Opportunity.prospect_id == prospect.id)):
+        raise HTTPException(409, "Introductory email is available only for Prospecting prospects without an Opportunity")
+    contact = db.get(Contact, prospect.contact_id) if prospect.contact_id else None
+    if contact and (contact.tenant_id != prospect.tenant_id or contact.account_id != account.id):
+        raise HTTPException(404, "Prospect contact unavailable")
+    return prospect, account, contact, lead
+
+
+@router.get("/prospects/{prospect_id}/outreach")
+def prospect_outreach(prospect_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    prospect, account, contact, lead = _outreach_context(db, user, prospect_id)
+    tenant = db.get(Tenant, prospect.tenant_id)
+    email = (contact.email if contact and contact.email else lead.email) or ""
+    email = email.strip()
+    valid_email = (len(email) <= 254 and bool(re.fullmatch(
+        r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+        r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+", email))
+        and not email.split("@")[0].startswith(".") and not email.split("@")[0].endswith(".")
+        and ".." not in email.split("@")[0])
+    phone = ((contact.phone if contact and contact.phone else lead.phone) or "").strip()
+    name = f"{contact.first_name} {contact.last_name}".strip() if contact else lead.contact_name
+    sender = user.full_name or tenant.primary_contact_name or tenant.name
+    subject = f"Introduction from {tenant.name}"
+    body = (f"Hello {name or 'there'},\n\n"
+            f"I'm {sender} with {tenant.name}. I wanted to introduce myself to the team at {account.name} "
+            "and learn a little more about your business.\n\n"
+            "Would you be open to a brief conversation to see whether staying in touch would be useful?\n\n"
+            f"Best regards,\n{sender}\n{tenant.name}")
+    return {"prospect_id": prospect.id, "tenant_id": prospect.tenant_id, "contact_id": contact.id if contact else None,
+            "email": email if valid_email else "", "invalid_email": bool(email and not valid_email),
+            "phone": phone, "subject": subject, "body": body,
+            "contact": model_dict(contact) if contact else None}
+
+
+class ProspectContactedIn(BaseModel):
+    request_id: UUID
+    method: Literal["Email", "Phone"]
+    confirmed: Literal[True]
+    note: str = Field(default="", max_length=2000)
+
+
+@router.post("/prospects/{prospect_id}/contacted")
+def prospect_contacted(prospect_id: str, payload: ProspectContactedIn, request: Request,
+                       user: User = Depends(current_user), db: Session = Depends(get_db)):
+    require_request_origin(request)
+    prospect, account, _, _ = _outreach_context(db, user, prospect_id)
+    # One atomic completed activity, not a send/delivery record. A stable request
+    # UUID makes network retries harmless without a new table or schema.
+    body = f"Prospect ID: {prospect.id}\nMethod: {payload.method}\nUser confirmed contact was made.\n{payload.note}"
+    activity_id = str(payload.request_id)
+    existing = db.get(Activity, activity_id)
+    if existing:
+        if (existing.tenant_id != prospect.tenant_id or existing.account_id != account.id
+                or existing.user_id != user.id or existing.activity_type not in {"Outreach Confirmed", "Contact Confirmed"} or existing.body != body):
+            raise HTTPException(409, "Contact confirmation identifier already used")
+        return {"activity": model_dict(existing)}
+    activity = Activity(id=activity_id, tenant_id=prospect.tenant_id, account_id=account.id,
+                        user_id=user.id, activity_type="Contact Confirmed",
+                        subject=f"{payload.method} contact manually confirmed", body=body,
+                        completed_at=datetime.now(timezone.utc))
+    db.add(activity)
+    try:
+        db.flush()
+        audit(db, user, "crm.prospect.contacted", tenant_id=prospect.tenant_id,
+              entity_type="prospect", entity_id=prospect.id,
+              data={"activity_id": activity.id, "method": payload.method})
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Contact confirmation is being recorded; retry with the same confirmation")
+    return {"activity": model_dict(activity)}
 
 
 def _team_user_ids(db: Session, tenant_id: str, team_name: str) -> list[str]:

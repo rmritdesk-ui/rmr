@@ -1,4 +1,5 @@
 import { bindUnifiedPipeline } from "./crm_pipeline_drag.js";
+import {openProspectOutreach} from "./crm_outreach.js";
 import {renderPiqIntelligence} from "./crm_piq_intelligence.js";
 import { bindMyWorkActions, buildMyWork, loadMyWork, maybeShowMyWorkReminder, renderMyWork } from "./crm_mywork.js";
 import {api} from '../api.js';
@@ -310,24 +311,21 @@ function bindCrmRecordActions(data, ctx) {
         );
     }),
   );
-  $$("[data-email-prospect]").forEach((btn) =>
+  $$("[data-email-prospect]").forEach((btn) => {
+    const prospect = data.prospects.find(x=>x.id===btn.dataset.emailProspect);
+    if(!prospect || prospect.stage!=="Prospecting" || prospect.opportunity_id){btn.remove();return;}
+    // Keep the original envelope glyph, icon class and card position.
+    btn.title="Email";
+    btn.setAttribute("aria-label","Email");
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const row = data.prospects.find(
         (x) => x.id === btn.dataset.emailProspect,
       );
       if (row)
-        openEmailComposer(
-          {
-            account_id: row.account_id,
-            contact_id: row.contact_id,
-            recipient_name: row.contact_name,
-            recipient_email: row.contact_email,
-          },
-          ctx,
-        );
-    }),
-  );
+        openProspectOutreach(row,ctx,(contact,close)=>editContactModal(contact,ctx,close));
+    });
+  });
   $$("[data-email-opportunity]").forEach((btn) =>
     btn.addEventListener("click", (e) => {
       e.stopPropagation();

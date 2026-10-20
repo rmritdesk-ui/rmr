@@ -161,3 +161,18 @@
 
 /* Keep historical/custom opportunity stages inside the same lifecycle group. */
 .v53-unified-group.opportunities{grid-column:3/-1}
+
+/* Prospect email uses the existing modal, fields and RMR button palette. */
+.crm-email-flow{min-width:0;overflow-wrap:anywhere}
+.crm-email-identity{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.crm-email-identity p{margin:4px 0 0;color:var(--muted)}
+.crm-email-flow h3{font-size:1rem;margin:0 0 12px}
+.crm-email-flow .field{margin-top:12px}
+.crm-email-flow textarea{min-height:140px;height:clamp(140px,24vh,210px);resize:vertical}
+.crm-email-flow .section-block p{color:var(--muted)}
+.crm-email-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.crm-email-phone{font-size:1.2rem;font-weight:700}
+.crm-email-flow [hidden]{display:none!important}
+.crm-email-flow #outreach-status:empty{display:none}
+.crm-email-flow #outreach-status{margin:16px 0;color:var(--v53-navy)}
+@media(max-width:540px){.crm-email-actions .button{flex:1 1 100%}.crm-email-identity{align-items:flex-start}.crm-email-flow textarea{height:140px}}

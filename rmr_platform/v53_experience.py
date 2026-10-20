@@ -287,6 +287,11 @@ def crm_overview(tenant_id: str, user: User = Depends(current_user), db: Session
                     if row.contact_id in contact_map and contact_map[row.contact_id].email
                     else lead_map.get(row.source_lead_id).email if row.source_lead_id in lead_map else ""
                 ),
+                "contact_phone": (
+                    contact_map[row.contact_id].phone
+                    if row.contact_id in contact_map and contact_map[row.contact_id].phone
+                    else lead_map.get(row.source_lead_id).phone if row.source_lead_id in lead_map else ""
+                ),
                 "opportunity_id": prospect_opp_map.get(row.id).id if row.id in prospect_opp_map else None,
                 "opportunity_name": prospect_opp_map.get(row.id).name if row.id in prospect_opp_map else "",
                 "opportunity_stage": prospect_opp_map.get(row.id).stage if row.id in prospect_opp_map else "",
