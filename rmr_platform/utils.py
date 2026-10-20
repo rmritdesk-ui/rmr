@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy.inspection import inspect
@@ -38,3 +38,17 @@ def allocation(revenue_cents: int, direct_cost_cents: int, split_basis: str,
     rmr = round(distributable * rmr_share_pct / 100)
     step2 = round(distributable * step2_share_pct / 100)
     return distributable, rmr, step2
+
+
+def normalize_datetime_utc(value: datetime | None) -> datetime | None:
+    """Treat naive persisted/API datetimes as UTC and normalize aware values to UTC."""
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def datetime_iso_utc(value: datetime | None) -> str | None:
+    normalized = normalize_datetime_utc(value)
+    return normalized.isoformat() if normalized else None

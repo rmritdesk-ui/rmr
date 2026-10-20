@@ -12,7 +12,9 @@ from .cb1_models import CB1Message, CB1SocialContent
 from .client_admin_models import CampaignExportPackage, ClientTrainingAssignment, ClientTrainingResource
 from .cumulative_product_models import MessageDeliveryContext
 from .db import get_db
+from .crm_conversion import create_prospect_from_lead
 from .models import (
+    CrmProspect,
     Account,
     Activity,
     Contact,
@@ -28,7 +30,7 @@ from .permissions import is_global_admin, require_client_operational_write, requ
 from .security import current_user, require_request_origin
 from .services import audit
 from .unified_models import AppointmentRequest, PiqEvidence
-from .utils import model_dict
+from .utils import model_dict, datetime_iso_utc
 
 router = APIRouter(prefix="/api/v53", tags=["v5.3-client-experience"])
 
@@ -218,12 +220,18 @@ def crm_overview(tenant_id: str, user: User = Depends(current_user), db: Session
     accounts = list(db.scalars(select(Account).where(Account.tenant_id == tenant_id).order_by(Account.name)))
     contacts = list(db.scalars(select(Contact).where(Contact.tenant_id == tenant_id).order_by(Contact.last_name, Contact.first_name)))
     leads = list(db.scalars(select(Lead).where(Lead.tenant_id == tenant_id).order_by(Lead.created_at.desc())))
+    prospects = list(db.scalars(select(CrmProspect).where(CrmProspect.tenant_id == tenant_id).order_by(CrmProspect.updated_at.desc())))
     opportunities = list(db.scalars(select(Opportunity).where(Opportunity.tenant_id == tenant_id).order_by(Opportunity.updated_at.desc())))
     activities = list(db.scalars(select(Activity).where(Activity.tenant_id == tenant_id).order_by(Activity.created_at.desc()).limit(300)))
 
     account_map = {row.id: row for row in accounts}
     contact_map = {row.id: row for row in contacts}
+    lead_map = {row.id: row for row in leads}
     opp_map = {row.id: row for row in opportunities}
+    prospect_opp_map = {row.prospect_id: row for row in opportunities if row.prospect_id}
+    prospects_by_account: dict[str, list[CrmProspect]] = {}
+    for prospect in prospects:
+        prospects_by_account.setdefault(prospect.account_id, []).append(prospect)
     account_contact_counts = dict(db.execute(select(Contact.account_id, func.count(Contact.id)).where(Contact.tenant_id == tenant_id).group_by(Contact.account_id)).all())
     account_opp_counts = dict(db.execute(select(Opportunity.account_id, func.count(Opportunity.id)).where(Opportunity.tenant_id == tenant_id).group_by(Opportunity.account_id)).all())
     activity_counts = dict(db.execute(select(Activity.opportunity_id, func.count(Activity.id)).where(Activity.tenant_id == tenant_id).group_by(Activity.opportunity_id)).all())
@@ -233,6 +241,7 @@ def crm_overview(tenant_id: str, user: User = Depends(current_user), db: Session
     summary = {
         "accounts": len(accounts),
         "active_leads": len([row for row in leads if row.status != "Converted"]),
+        "prospects": len(prospects),
         "open_opportunities": len([row for row in opportunities if row.stage not in CLOSED_STAGES]),
         "weighted_pipeline_cents": int(round(weighted)),
     }
@@ -240,8 +249,9 @@ def crm_overview(tenant_id: str, user: User = Depends(current_user), db: Session
         "summary": summary,
         "accounts": [
             {
-                **_row(row),
+                **_crm_row(row),
                 "owner_name": users.get(row.owner_user_id).full_name if row.owner_user_id in users else "Unassigned",
+                "has_won_opportunity": any(o.account_id == row.id and o.stage == "Closed Won" for o in opportunities),
                 "contact_count": int(account_contact_counts.get(row.id, 0)),
                 "opportunity_count": int(account_opp_counts.get(row.id, 0)),
             }
@@ -249,7 +259,7 @@ def crm_overview(tenant_id: str, user: User = Depends(current_user), db: Session
         ],
         "contacts": [
             {
-                **_row(row),
+                **_crm_row(row),
                 "account_name": account_map.get(row.account_id).name if row.account_id in account_map else "",
                 "open_opportunity_count": len([opp for opp in opportunities if opp.contact_id == row.id and opp.stage not in CLOSED_STAGES]),
             }
@@ -257,15 +267,35 @@ def crm_overview(tenant_id: str, user: User = Depends(current_user), db: Session
         ],
         "leads": [
             {
-                **_row(row),
+                **_crm_row(row),
                 "assigned_name": users.get(row.assigned_user_id).full_name if row.assigned_user_id in users else "Unassigned",
                 "piq": _piq_for_company(db, tenant_id, row.company_name),
             }
             for row in leads
         ],
+        "prospects": [
+            {
+                **_crm_row(row),
+                "account_name": account_map.get(row.account_id).name if row.account_id in account_map else "",
+                "contact_name": (
+                    f"{contact_map.get(row.contact_id).first_name} {contact_map.get(row.contact_id).last_name}".strip()
+                    if row.contact_id in contact_map else ""
+                ),
+                "contact_id": row.contact_id,
+                "contact_email": (
+                    contact_map[row.contact_id].email
+                    if row.contact_id in contact_map and contact_map[row.contact_id].email
+                    else lead_map.get(row.source_lead_id).email if row.source_lead_id in lead_map else ""
+                ),
+                "opportunity_id": prospect_opp_map.get(row.id).id if row.id in prospect_opp_map else None,
+                "opportunity_name": prospect_opp_map.get(row.id).name if row.id in prospect_opp_map else "",
+                "opportunity_stage": prospect_opp_map.get(row.id).stage if row.id in prospect_opp_map else "",
+            }
+            for row in prospects
+        ],
         "opportunities": [
             {
-                **_row(row),
+                **_crm_row(row),
                 "account_name": account_map.get(row.account_id).name if row.account_id in account_map else "",
                 "contact_name": (
                     f"{contact_map.get(row.contact_id).first_name} {contact_map.get(row.contact_id).last_name}".strip()
@@ -281,13 +311,35 @@ def crm_overview(tenant_id: str, user: User = Depends(current_user), db: Session
         ],
         "activities": [
             {
-                **_row(row),
+                **_crm_row(row),
                 "account_name": account_map.get(row.account_id).name if row.account_id in account_map else "",
                 "opportunity_name": opp_map.get(row.opportunity_id).name if row.opportunity_id in opp_map else "",
+                "opportunity_stage": opp_map.get(row.opportunity_id).stage if row.opportunity_id in opp_map else "",
+                "opportunity_next_action": opp_map.get(row.opportunity_id).next_action if row.opportunity_id in opp_map else "",
+                "expected_close_date": (
+                    opp_map[row.opportunity_id].expected_close_date.isoformat()
+                    if row.opportunity_id in opp_map and opp_map[row.opportunity_id].expected_close_date else None
+                ),
+                "prospect_context": [
+                    {
+                        "contact_name": (
+                            f"{contact_map[prospect.contact_id].first_name} {contact_map[prospect.contact_id].last_name}".strip()
+                            if prospect.contact_id in contact_map
+                            else lead_map[prospect.source_lead_id].contact_name if prospect.source_lead_id in lead_map else ""
+                        ),
+                        "stage": prospect.stage,
+                        "next_action": prospect.next_action,
+                        "follow_up_date": prospect.follow_up_date.isoformat() if prospect.follow_up_date else None,
+                        "stage_note": prospect.stage_note,
+                        "not_pursuing_reason": prospect.not_pursuing_reason,
+                    }
+                    for prospect in prospects_by_account.get(row.account_id, [])
+                ] if not row.opportunity_id else [],
                 "actor_name": users.get(row.user_id).full_name if row.user_id in users else "System",
             }
             for row in activities
         ],
+        "read_only": is_global_admin(user) and not (getattr(user, "_managed_tenant_id", None) == tenant_id and getattr(user, "_managed_access_type", "") == "managed_write"),
         "data_scope": f"CRM records for {db.get(Tenant, tenant_id).name}",
     }
 
@@ -297,17 +349,19 @@ def crm_record_detail(tenant_id: str, record_type: Literal["account", "contact",
                       user: User = Depends(current_user), db: Session = Depends(get_db)):
     _require_client_admin_scope(user, tenant_id)
     users = _user_map(db, tenant_id)
+    piq_intelligence = None
     if record_type == "account":
         account = db.get(Account, record_id)
         if not account or account.tenant_id != tenant_id:
             raise HTTPException(status_code=404, detail="Account not found")
         contacts = list(db.scalars(select(Contact).where(Contact.account_id == account.id).order_by(Contact.primary_contact.desc(), Contact.last_name)))
         opportunities = list(db.scalars(select(Opportunity).where(Opportunity.account_id == account.id).order_by(Opportunity.updated_at.desc())))
+        prospects = list(db.scalars(select(CrmProspect).where(CrmProspect.account_id == account.id).order_by(CrmProspect.updated_at.desc())))
         activities = list(db.scalars(select(Activity).where(Activity.account_id == account.id).order_by(Activity.created_at.desc()).limit(100)))
-        primary = {**_row(account), "owner_name": users.get(account.owner_user_id).full_name if account.owner_user_id in users else "Unassigned"}
+        primary = {**_crm_row(account), "owner_name": users.get(account.owner_user_id).full_name if account.owner_user_id in users else "Unassigned"}
         messages = _messages_for_record(db, tenant_id, account_id=account.id)
         piq = _piq_for_company(db, tenant_id, account.name)
-        related = {"contacts": [_row(row) for row in contacts], "opportunities": [_row(row) for row in opportunities]}
+        related = {"contacts": [_crm_row(row) for row in contacts], "opportunities": [_crm_row(row) for row in opportunities], "prospects": [_crm_row(row) for row in prospects]}
     elif record_type == "contact":
         contact = db.get(Contact, record_id)
         if not contact or contact.tenant_id != tenant_id:
@@ -320,17 +374,19 @@ def crm_record_detail(tenant_id: str, record_type: Literal["account", "contact",
         if opportunities:
             activity_predicates.append(Activity.opportunity_id.in_([x.id for x in opportunities]))
         activities = list(db.scalars(select(Activity).where(or_(*activity_predicates)).order_by(Activity.created_at.desc()).limit(100))) if activity_predicates else []
-        primary = {**_row(contact), "name": f"{contact.first_name} {contact.last_name}".strip(), "account_name": account.name if account else ""}
+        primary = {**_crm_row(contact), "name": f"{contact.first_name} {contact.last_name}".strip(), "account_name": account.name if account else ""}
         messages = _messages_for_record(db, tenant_id, account_id=contact.account_id, contact_id=contact.id)
         piq = _piq_for_company(db, tenant_id, account.name if account else "")
-        related = {"account": _row(account) if account else None, "opportunities": [_row(row) for row in opportunities]}
+        related = {"account": _crm_row(account) if account else None, "opportunities": [_crm_row(row) for row in opportunities]}
     elif record_type == "lead":
         lead = db.get(Lead, record_id)
         if not lead or lead.tenant_id != tenant_id:
             raise HTTPException(status_code=404, detail="Lead not found")
-        primary = {**_row(lead), "assigned_name": users.get(lead.assigned_user_id).full_name if lead.assigned_user_id in users else "Unassigned"}
+        primary = {**_crm_row(lead), "assigned_name": users.get(lead.assigned_user_id).full_name if lead.assigned_user_id in users else "Unassigned"}
         messages = _messages_for_record(db, tenant_id, lead_id=lead.id)
         piq = _piq_for_company(db, tenant_id, lead.company_name)
+        from .prospectiq_bridge.crm_intelligence import lead_intelligence
+        piq_intelligence = lead_intelligence(db, tenant_id, lead.id)
         activities = []
         related = {}
     else:
@@ -339,9 +395,14 @@ def crm_record_detail(tenant_id: str, record_type: Literal["account", "contact",
             raise HTTPException(status_code=404, detail="Opportunity not found")
         account = db.get(Account, opportunity.account_id) if opportunity.account_id else None
         contact = db.get(Contact, opportunity.contact_id) if opportunity.contact_id else None
-        activities = list(db.scalars(select(Activity).where(Activity.opportunity_id == opportunity.id).order_by(Activity.created_at.desc()).limit(100)))
+        activity_scope = [Activity.opportunity_id == opportunity.id]
+        if opportunity.account_id:
+            activity_scope.append(
+                (Activity.account_id == opportunity.account_id) & Activity.opportunity_id.is_(None)
+            )
+        activities = list(db.scalars(select(Activity).where(or_(*activity_scope)).order_by(Activity.created_at.desc()).limit(100)))
         primary = {
-            **_row(opportunity),
+            **_crm_row(opportunity),
             "account_name": account.name if account else "",
             "contact_name": f"{contact.first_name} {contact.last_name}".strip() if contact else "",
             "contact_email": contact.email if contact else "",
@@ -350,16 +411,17 @@ def crm_record_detail(tenant_id: str, record_type: Literal["account", "contact",
         }
         messages = _messages_for_record(db, tenant_id, account_id=opportunity.account_id, opportunity_id=opportunity.id, contact_id=opportunity.contact_id)
         piq = _piq_for_company(db, tenant_id, account.name if account else opportunity.name.replace(" opportunity", ""))
-        related = {"account": _row(account) if account else None, "contact": _row(contact) if contact else None}
+        related = {"account": _crm_row(account) if account else None, "contact": _crm_row(contact) if contact else None}
 
     return {
         "record_type": record_type,
         "record": primary,
         "related": related,
-        "activities": [_row(row) for row in activities],
+        "activities": [_crm_row(row) for row in activities],
         "messages": messages,
         "piq": piq,
-        "read_only": is_global_admin(user),
+        "piq_intelligence": piq_intelligence,
+        "read_only": is_global_admin(user) and not (getattr(user, "_managed_tenant_id", None) == tenant_id and getattr(user, "_managed_access_type", "") == "managed_write"),
     }
 
 
@@ -597,3 +659,32 @@ def forecast_dashboard(tenant_id: str, user: User = Depends(current_user), db: S
         },
         "data_scope": f"Forecast and CRM values for {tenant.name} only.",
     }
+
+
+@router.post("/leads/{lead_id}/convert-to-prospect")
+def controlled_lead_prospect_conversion(lead_id: str, payload: LeadConversionIn, request: Request,
+                               user: User = Depends(current_user), db: Session = Depends(get_db)):
+    require_request_origin(request)
+    lead = db.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    require_client_operational_write(user, lead.tenant_id)
+    account, contact, prospect = create_prospect_from_lead(
+        db, lead, user, account_name=payload.account_name
+    )
+    db.commit()
+    return {
+        "lead": _row(lead),
+        "account": _row(account),
+        "contact": _row(contact),
+        "prospect": _row(prospect),
+    }
+
+
+def _crm_row(obj):
+    data = _row(obj)
+    for key in data:
+        value = getattr(obj, key, None)
+        if isinstance(value, datetime):
+            data[key] = datetime_iso_utc(value)
+    return data

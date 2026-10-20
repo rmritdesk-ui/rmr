@@ -1,10 +1,26 @@
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import Any, Literal
+from datetime import date, datetime, timezone
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, BeforeValidator, Field, field_validator
 
+
+def _utc_datetime_input(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return value
+    if not isinstance(value, datetime):
+        return value
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+UTCDateTime = Annotated[datetime | None, BeforeValidator(_utc_datetime_input)]
 
 class LoginRequest(BaseModel):
     email: str
@@ -199,13 +215,14 @@ class OpportunityCreate(BaseModel):
 
 
 class OpportunityUpdate(BaseModel):
+    expected_stage: str | None = None
     name: str | None = Field(default=None, min_length=1, max_length=200)
     stage: str | None = None
     value_cents: int | None = Field(default=None, ge=0)
     probability_pct: int | None = Field(default=None, ge=0, le=100)
     expected_close_date: date | None = None
     next_action: str | None = None
-    loss_reason: str | None = None
+    loss_reason: str | None = Field(default=None, max_length=500)
 
 
 class ActivityCreate(BaseModel):
@@ -214,7 +231,7 @@ class ActivityCreate(BaseModel):
     activity_type: str = "Note"
     subject: str = ""
     body: str = ""
-    due_at: datetime | None = None
+    due_at: UTCDateTime = None
 
 
 class ForecastMonthUpdate(BaseModel):
@@ -327,3 +344,19 @@ class PublicLeadCreate(BaseModel):
     phone: str = ""
     company: str = ""
     message: str = ""
+
+
+class CrmProspectUpdate(BaseModel):
+    stage: Literal["Prospecting", "Engaged", "Nurture", "Not Pursuing", "Customer"]
+    next_action: str = Field(default="", max_length=300)
+    follow_up_date: date | None = None
+    stage_note: str = Field(default="", max_length=2000)
+    not_pursuing_reason: str = Field(default="", max_length=500)
+
+
+class ProspectOpportunityCreate(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+    value_cents: int = Field(default=0, ge=0)
+    probability_pct: int = Field(default=10, ge=0, le=100)
+    expected_close_date: date | None = None
+    next_action: str = Field(default="", max_length=300)

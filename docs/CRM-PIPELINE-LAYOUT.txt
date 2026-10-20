@@ -1,0 +1,91 @@
+CRM Pipeline layout integration
+===============================
+
+Scope
+-----
+Only the CLIENT_ADMIN CRM Pipeline presentation and its existing interaction
+module changed. Stitch code.html and DESIGN.md are structural references, not
+runtime dependencies. No Stitch fonts, colors, static example records, Tailwind,
+external assets, backend routes, or schema changes were imported.
+
+The Pipeline restores the original CRM hero unchanged, including its
+New Record/Import actions and weighted-pipeline summary. It uses compact
+linked summaries, horizontal underlined CRM tabs, lifecycle group
+headers, stage totals, bordered cards, and explicit empty-column states.
+All styling uses the existing RMR font inheritance, button classes and
+--v53-* theme tokens. The sidebar, topbar and dialogs remain unchanged.
+Main lanes are New Leads, Prospects, Qualified, Proposal, Verbal Commitment,
+Closed Won and Closed Lost. Prospecting, Nurture, Engaged and Not Pursuing
+are dropdown sub-statuses within Prospects, never separate lanes.
+Historical Opportunities with non-board stages remain labeled in Prospects,
+keeping their real record type/stage and existing dialogs; no data is rewritten.
+Their moves still use their original stored expected_stage for conflict checks.
+
+Scrolling
+---------
+The search toolbar and adjacent duplicate icon are omitted across the CRM tabs.
+Tab counts and navigation handlers are unchanged.
+
+The Pipeline workspace height is clamp(560px,72dvh,1100px) on desktop and
+clamp(440px,65dvh,760px) on narrow screens. The original hero can scroll above
+the workspace, but record count cannot expand the page. The board has one internal horizontal
+scroller; each lane scrolls vertically beneath its fixed stage heading.
+No mirrored scrollbar or animated/smooth scrolling is used.
+Mouse wheel, trackpad and touch use native scrolling. Shift+vertical wheel
+is translated immediately into board horizontal movement where necessary.
+Scrollbars use existing RMR blue with subtle tracks and hover/active colors.
+Dragging near the horizontal viewport edge advances the board on pointer move.
+
+Interactions preserved
+----------------------
+Entire eligible Prospect/Opportunity cards retain the existing drag callbacks.
+Prospect -> Qualified opens Create Opportunity. Other Prospect drop targets
+are invalid. No promotion arrow or Opportunity stage dropdown was added.
+Opportunity transitions retain expected_stage conflict protection and the
+existing Closed Won confirmation / Closed Lost reason dialogs.
+Keyboard ArrowLeft/ArrowRight, pointer and horizontal touch dragging use the
+same callbacks. Nested controls do not initiate a drag; plain card clicks open
+the existing details/edit dialog. Read-only users have no mutation handles.
+New DOM after refresh/filter/stage changes is bound by the normal renderer.
+Secondary/right-button and non-primary pointer presses do not initiate dragging.
+
+Accounts, Contacts, Activities, MyWork, reminder popup/link, email/activity
+actions, timelines and local-time formatting are retained.
+The cleaner tab strip is shared across CRM tabs; their content and behavior,
+and other application pages, are unchanged.
+
+Validation
+----------
+Focused offline Chromium tests use synthetic tenants and temporary databases,
+not the running local application. Coverage includes import, promotion,
+repeated pointer dragging, keyboard movement, touch dragging, Won/Lost dialogs,
+nested controls, stale-stage refresh, read-only access, MyWork reminder navigation,
+desktop/mobile containment, independent lane scrolling and Shift+wheel.
+Backend compatibility and CRM tests cover existing transition/API semantics.
+JavaScript syntax and whitespace checks are run separately.
+
+Final validation (2026-10-20): 57 passed, 0 failed across
+tests/test_crm_import_browser.py (13), tests/test_crm_merge_compatibility.py,
+and tests/test_launch1_crm_drip.py (44 combined backend tests).
+Both changed JavaScript modules passed node --input-type=module --check.
+git diff --check passed. Desktop (1440px) and narrow (390px) screenshots
+were reviewed. The only test warning was an existing Starlette/AnyIO
+BlockingPortal deprecation.
+
+Follow-up layout correction: all 13 focused browser tests passed again,
+including removal of Pipeline search/duplicate controls, the original hero,
+underlined tab styling, larger desktop/mobile board heights, no page growth
+when adding more cards, internal scrolling, drag/drop and MyWork reminders.
+JavaScript syntax and git diff --check also passed. No drag module or backend
+changes were needed for this correction.
+
+Workflow correction validation: 59 tests passed (15 browser, 44 backend).
+New coverage asserts exactly seven lanes, four ordinary Prospect sub-statuses
+inside Prospects, no search toolbar on any CRM tab, legacy Opportunity access
+without extra lanes, and no ArrowLeft move from Qualified into Prospecting.
+Existing promotion, pointer/touch/keyboard, Won/Lost, stale-stage, permissions,
+dialog and MyWork tests passed. Backend code/data and APIs are unchanged.
+
+No deployment, commit, provider call, email delivery or billing call is required
+for this validation. Physical-device/browser combinations beyond the tested
+Chromium viewport/touch emulation still warrant normal acceptance testing.

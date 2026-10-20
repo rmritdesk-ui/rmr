@@ -28,7 +28,7 @@ async function setup(api) {
 test('explicit bridge OFF preserves native page',async()=>{
  const x=await setup(async()=>({enabled:false}));assert.equal(await x.render(),false);assert.equal(x.page.innerHTML,'native sentinel');
 });
-test('bridge ON defaults to clean launcher; source cards are secondary history',async()=>{
+test('bridge ON shows only the launcher without historical profile controls or requests',async()=>{
  const requests=[];
  const x=await setup(async(path,options)=>{
   requests.push([path,options]);
@@ -39,12 +39,12 @@ test('bridge ON defaults to clean launcher; source cards are secondary history',
  });
  assert.equal(await x.render(),true);assert.ok(!x.page.innerHTML.includes('Original'));
  assert.match(x.page.innerHTML,/Open ProspectIQ/);
- for(const label of ['Pull Leads','Run Adaptive Research','Move to CRM','Create Target Profile','data-open-piq'])assert.ok(!x.page.innerHTML.includes(label));
- await x.node('[data-piq-history]').click();await new Promise(r=>setImmediate(r));
- assert.match(x.node('[data-piq-history-content]').innerHTML,/Original &lt;profile>/);
- assert.match(x.node('[data-piq-history-content]').innerHTML,/Historical RMR source/);
- assert.match(x.node('[data-piq-history-content]').innerHTML,/not automatically synchronized/);
- await x.node('[data-piq-main]').click();await x.button.click();assert.equal(requests.at(-1)[1].body.destination,'prospects');assert.equal(x.calls.length,1);
+ for(const label of ['Pull Leads','Run Adaptive Research','Move to CRM','Create Target Profile','data-open-piq',
+   'Previous RMR Profiles','data-piq-history','data-piq-source-profile','data-copy-profile'])assert.ok(!x.page.innerHTML.includes(label));
+ assert.equal(x.node('[data-piq-history]').click,undefined);
+ assert.equal(requests.length,2);
+ await x.button.click();assert.equal(requests.at(-1)[1].body.destination,'prospects');assert.equal(x.calls.length,1);
+ assert.ok(requests.every(([path])=>!path.includes('target-profiles')&&!path.includes('history-copy')));
 });
 test('unavailable or unauthorized bridge fails closed, not native fallback',async()=>{
  const x=await setup(async()=>{throw Error('unavailable');});assert.equal(await x.render(),true);assert.match(x.page.innerHTML,/data-piq-bridge-unavailable/);
@@ -53,36 +53,39 @@ test('tenant change during loading cannot display or launch another tenant',asyn
  let x;x=await setup(async()=>{x.state.selectedTenantId='tenant-b';return {enabled:true,mapping_id:'mapping-a'};});
  assert.equal(await x.render(),true);assert.equal(x.page.innerHTML,'native sentinel');assert.equal(x.button.click,undefined);
 });
-test('profile-summary read failure still permits authorized launcher',async()=>{
+test('historical profile API is not needed for the authorized launcher',async()=>{
  const x=await setup(async(path)=>{if(path.includes('availability'))return {enabled:true,mapping_id:'mapping-a'};if(path.endsWith('/profiles/bootstrap'))return {status:'completed'};throw Error('summary unavailable');});
  assert.equal(await x.render(),true);assert.match(x.page.innerHTML,/data-open-prospectiq/);
- await x.node('[data-piq-history]').click();await new Promise(r=>setImmediate(r));
- assert.match(x.node('[data-piq-history-content]').innerHTML,/temporarily unavailable/);
+ assert.ok(!x.page.innerHTML.includes('data-piq-history-content'));
 });
 
-test('explicit copy persists retry identity, blocks double click and opens existing SSO profile destination',async()=>{
- const requests=[];let release,attempt=0;
+test('Open ProspectIQ prevents duplicate launch and preserves the secure destination',async()=>{
+ const requests=[];let release;
  const x=await setup(async(path,options)=>{
   if(path.includes('availability'))return {enabled:true,mapping_id:'mapped'};
   if(path.endsWith('/profiles/bootstrap'))return {status:'completed'};
-  if(path.endsWith('/history-copy')){
-   requests.push(options.body);attempt++;
-   if(attempt===1){await new Promise(r=>release=r);throw Error('response lost');}
-   return {profile_id:'new',status:'draft'};
+  if(path.endsWith('/launch')){
+   requests.push(options.body);
+   await new Promise(r=>release=r);
+   return {launch_url:'https://piq.test/#rmr-start=existing-flow'};
   }
-  if(path.endsWith('/launch')){assert.equal(options.body.destination,'target_profiles');return {launch_url:'https://piq.test/#rmr-start=existing-flow'};}
-  return {profiles:[{id:'source-a',name:'Historical'}]};
+  throw Error('Unexpected history request');
  });
  await x.render();assert.equal(requests.length,0);
- await x.node('[data-piq-history]').click();await new Promise(r=>setImmediate(r));
- const button=x.node('[data-copy-profile="source-a"]');const first=button.click();await new Promise(r=>setImmediate(r));
- await button.click();assert.equal(requests.length,1);release();await first;
- await x.render();assert.equal(requests.length,1); // reopening never copies
- await x.node('[data-piq-history]').click();await new Promise(r=>setImmediate(r));await button.click();
- assert.equal(requests[0].request_id,requests[1].request_id);assert.deepEqual(Object.keys(requests[0]).sort(),['request_id','source_profile_id']);
- assert.match(x.node('[data-copy-result="source-a"]').innerHTML,/activate it before pulling leads/);
- await x.node('[data-open-copy]').click();assert.equal(x.calls.length,1);
- await button.click();assert.notEqual(requests[2].request_id,requests[1].request_id);
+ const first=x.button.click();await new Promise(r=>setImmediate(r));
+ await x.button.click();assert.equal(requests.length,1);
+ assert.equal(requests[0].mapping_id,'mapped');assert.equal(requests[0].destination,'prospects');
+ release();await first;assert.equal(x.calls[0],'https://piq.test/#rmr-start=existing-flow');
+});
+test('insecure launch URL is rejected and button becomes retryable',async()=>{
+ const x=await setup(async path=>{
+  if(path.includes('availability'))return {enabled:true,mapping_id:'mapped'};
+  if(path.endsWith('/profiles/bootstrap'))return {status:'completed'};
+  return {launch_url:'http://piq.test/'};
+ });
+ await x.render();await x.button.click();
+ assert.equal(x.calls.length,0);assert.equal(x.button.disabled,false);
+ assert.match(x.messages[0],/Secure ProspectIQ destination required/);
 });
 test('first use prepares only through POST then permits the existing launch',async()=>{
  const requests=[];let x;

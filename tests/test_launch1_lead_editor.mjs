@@ -21,5 +21,5 @@ test('lead editor submits four existing fields and returns to reloaded CRM list'
   assert.deepEqual(navigation,['crm?tab=leads']);assert.equal(closed,2);
   form.reportValidity=()=>false;await save();assert.equal(requests.length,1);
   assert.match(source,/data-record-action="edit-lead"/);
-  assert.match(source,/action==='edit-lead'\) editLeadModal\(r,ctx,close\)/);
+  assert.match(source,/action\s*===\s*["']edit-lead["']\)\s*editLeadModal\(r,\s*ctx,\s*close\)/);
 });

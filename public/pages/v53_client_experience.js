@@ -1,3 +1,6 @@
+import { bindUnifiedPipeline } from "./crm_pipeline_drag.js";
+import {renderPiqIntelligence} from "./crm_piq_intelligence.js";
+import { bindMyWorkActions, buildMyWork, loadMyWork, maybeShowMyWorkReminder, renderMyWork } from "./crm_mywork.js";
 import {api} from '../api.js';
 import {openCrmImport} from './crm_import.js';
 import {renderProspectiqBridge} from './prospectiq_bridge_ui.js';
@@ -8,8 +11,29 @@ import {state} from '../state.js';
 import {$, $$, esc, modal, money, number, pageHead, toast} from '../ui.js';
 
 const ROUTES = new Set(['home','crm','piq','campaigns','email','forecast','reports','training','organization','solutions']);
-const STAGES = ['Prospecting','Qualified','Proposal','Verbal Commitment','Closed Won','Closed Lost'];
-const fmtDate = value => value ? new Date(value).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : '—';
+const STAGES = [
+  "Prospecting",
+  "Qualified",
+  "Proposal",
+  "Verbal Commitment",
+  "Closed Won",
+  "Closed Lost",
+];
+// Main board workflow; retain STAGES for existing legacy record dialogs.
+const PIPELINE_STAGES = STAGES.filter((stage) => stage !== "Prospecting");
+const fmtDate = (value) =>
+  value
+    ? (/^\d{4}-\d{2}-\d{2}$/.test(String(value))
+        ? (() => {
+            const [year, month, day] = String(value).split("-").map(Number);
+            return new Date(year, month - 1, day);
+          })()
+        : new Date(value)).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "—";
 const fmtDateTime = value => value ? new Date(value).toLocaleString() : '—';
 const title = value => String(value || '').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
 const roleLabel = role => ({CLIENT_ADMIN:'Client Administrator',VP_SALES:'VP of Sales',SALES_MANAGER:'Sales Manager',SALES_REP:'Sales Representative',MARKETING_USER:'Marketing User',EXECUTIVE_VIEWER:'Executive Viewer'})[role]||title(role);
@@ -68,104 +92,487 @@ function greeting(){const h=new Date().getHours();return h<12?'morning':h<18?'af
 function activityIcon(type){const t=String(type||'').toLowerCase();if(t.includes('email'))return '✉';if(t.includes('conversion'))return '↗';if(t.includes('task'))return '✓';if(t.includes('call'))return '☎';return '•'}
 function moduleCard(label,detail,route,icon){return `<button class="v53-module-card" data-v53-route="${route}"><span>${icon}</span><div><strong>${label}</strong><small>${detail}</small></div><b>→</b></button>`}
 
-async function crm(page,ctx){
-  const data=await api(`/api/v53/tenants/${state.selectedTenantId}/crm/overview`);
-  const query=state.routeQuery||{};
-  const tab=query.lead?'leads':query.tab||state.unifiedTab.v53Crm||'opportunities';
-  state.unifiedTab.v53Crm=tab;
-  const tabs=[['accounts',`Accounts ${data.summary.accounts}`],['leads',`Leads ${data.summary.active_leads}`],['opportunities',`Opportunities ${data.summary.open_opportunities}`],['contacts',`Contacts ${data.contacts.length}`],['activities',`Activities ${data.activities.length}`]];
-  const searchValue=query.search||'';
-  page.innerHTML=`${hero({eyebrow:'CONNECTED CRM',title:'Relationships become revenue here.',body:'Open any record to see its people, opportunities, messages, activity history and ProspectIQ intelligence in one connected view.',actions:`<button class="button" id="v53-crm-new">+ New Record</button><button class="button secondary" id="v53-crm-import">Import</button>`,aside:`<span>Weighted pipeline</span><strong>${cents(data.summary.weighted_pipeline_cents)}</strong><small>${data.summary.open_opportunities} open opportunities</small>`})}
-  ${scopedNote(data.data_scope)}
-  <div class="v53-metric-grid compact">${metric({label:'Accounts',value:data.summary.accounts,detail:'Open customer and partner relationships',route:'crm?tab=accounts',tone:'blue',icon:'◉'})}${metric({label:'Active Leads',value:data.summary.active_leads,detail:'Work new and qualified prospects',route:'crm?tab=leads',tone:'purple',icon:'◆'})}${metric({label:'Open Opportunities',value:data.summary.open_opportunities,detail:'Manage the active pipeline',route:'crm?tab=opportunities',tone:'green',icon:'↗'})}${metric({label:'Weighted Pipeline',value_cents:data.summary.weighted_pipeline_cents,detail:'View contributing opportunities',route:'crm?tab=opportunities',tone:'gold',icon:'$'})}</div>
-  <section class="v53-panel v53-crm-shell"><header><div class="v53-tabs">${tabs.map(([key,label])=>`<button class="v53-tab ${tab===key?'active':''}" data-crm-tab="${key}">${esc(label)}</button>`).join('')}</div><div class="v53-crm-tools"><label class="v53-search"><span>⌕</span><input id="v53-crm-search" value="${esc(searchValue)}" placeholder="Search CRM records"></label><button class="v53-icon-action" id="v53-crm-duplicates" title="Find duplicates">≋</button></div></header><div class="v53-panel-body" id="v53-crm-content">${renderCrmTab(tab,data,query)}</div></section>`;
-  $$('[data-crm-tab]').forEach(btn=>btn.addEventListener('click',()=>ctx.navigate(`crm?tab=${btn.dataset.crmTab}`)));
-  $('#v53-crm-search').addEventListener('input',e=>filterCrmRows(e.target.value));
-  $('#v53-crm-new').addEventListener('click',()=>newCrmRecordModal(tab,data,ctx));
-  $('#v53-crm-import').addEventListener('click',()=>openCrmImport(ctx));
-  $('#v53-crm-duplicates').addEventListener('click',()=>duplicatesModal(ctx));
-  bindCrmRecordActions(data,ctx);
-  if(query.lead) {
-    if(query.tenant===state.selectedTenantId && data.leads.some(row=>row.id===query.lead))
-      await openCrmRecord('lead',query.lead,ctx);
-    else toast('CRM lead unavailable in this authorized workspace','error');
+async function crm(page, ctx) {
+  const [data, myWork] = await Promise.all([
+    api(`/api/v53/tenants/${state.selectedTenantId}/crm/overview`),
+    loadMyWork(),
+  ]);
+  const myWorkBuckets = buildMyWork(myWork);
+  const query = state.routeQuery || {};
+  const requestedTab = query.lead
+    ? "leads"
+    : query.tab || state.unifiedTab.v53Crm || "opportunities";
+  const pipelineTabs = new Set(["leads", "prospects", "opportunities"]);
+  const tab = pipelineTabs.has(requestedTab) ? "pipeline" : requestedTab;
+  const pipelineView =
+    query.pipeline_view || (pipelineTabs.has(requestedTab) ? requestedTab : "all");
+  const viewQuery = { ...query, pipeline_view: pipelineView };
+  const visiblePipelineCount =
+    data.summary.active_leads +
+    data.prospects.filter((row) => !row.opportunity_id).length +
+    data.opportunities.length;
+  state.unifiedTab.v53Crm = tab;
+  const tabs = [
+    ["pipeline", `Pipeline ${visiblePipelineCount}`],
+    ["accounts", `Accounts ${data.summary.accounts}`],
+    ["contacts", `Contacts ${data.contacts.length}`],
+    ["activities", `Activities ${data.activities.length}`],
+    ["mywork", `MyWork ${myWorkBuckets.overdue.length + myWorkBuckets.today.length}`],
+  ];
+  page.innerHTML = `${hero({ eyebrow: "CONNECTED CRM", title: "Relationships become revenue here.", body: "Open any record to see its people, opportunities, messages, activity history and ProspectIQ intelligence in one connected view.", actions: tab === "mywork" ? "" : `<button class="button" id="v53-crm-new">+ New Record</button><button class="button secondary" id="v53-crm-import">Import</button>`, aside: `<span>Weighted pipeline</span><strong>${cents(data.summary.weighted_pipeline_cents)}</strong><small>${data.summary.open_opportunities} open opportunities</small>` })}
+  <div class="v53-metric-grid compact">${metric({ label: "Accounts", value: data.summary.accounts, detail: "Open customer and partner relationships", route: "crm?tab=accounts", tone: "blue", icon: "◉" })}${metric({ label: "Active Leads", value: data.summary.active_leads, detail: "Work new and qualified prospects", route: "crm?tab=leads", tone: "purple", icon: "◆" })}${metric({ label: "Open Opportunities", value: data.summary.open_opportunities, detail: "Manage the active pipeline", route: "crm?tab=opportunities", tone: "green", icon: "↗" })}${metric({ label: "Weighted Pipeline", value_cents: data.summary.weighted_pipeline_cents, detail: "View contributing opportunities", route: "crm?tab=opportunities", tone: "gold", icon: "$" })}</div>
+  <section class="v53-panel v53-crm-shell"><header class="v53-crm-toolbar"><div class="v53-tabs" aria-label="CRM sections">${tabs.map(([key, label]) => `<button class="v53-tab ${tab === key ? "active" : ""}" data-crm-tab="${key}">${esc(label)}</button>`).join("")}</div></header><div class="v53-panel-body" id="v53-crm-content">${tab === "mywork" ? renderMyWork(myWork) : renderCrmTab(tab, data, viewQuery)}</div></section>`;
+  if (data.read_only) {
+    const mutationSelectors = [
+      "#v53-crm-new", "#v53-crm-import", "[data-convert-lead]",
+      "[data-email-prospect]", "[data-activity-prospect]", "[data-activity-opportunity]",
+      ".v53-prospect-stage-control",
+      "[data-email-opportunity]",
+    ];
+    $$(mutationSelectors.join(","), page).forEach((control) => control.remove());
+    $$('[data-pipeline-drag-handle]', page).forEach((card) => {
+      card.removeAttribute('draggable');
+      card.removeAttribute('data-pipeline-drag-handle');
+      card.removeAttribute('data-pipeline-drag-type');
+      card.removeAttribute('data-pipeline-drag-id');
+      card.removeAttribute('data-pipeline-drag-stage');
+      card.removeAttribute('data-pipeline-drag-label');
+      card.classList.remove('is-card-draggable');
+    });
+    $$('[data-edit-prospect]', page).forEach((card) => {
+      card.removeAttribute('data-edit-prospect');
+      card.removeAttribute('role');
+      card.removeAttribute('tabindex');
+      card.removeAttribute('aria-label');
+    });
+  }
+  $$("[data-crm-tab]").forEach((btn) =>
+    btn.addEventListener("click", () =>
+      ctx.navigate(`crm?tab=${btn.dataset.crmTab}`),
+    ),
+  );
+  $("#v53-crm-new")?.addEventListener("click", () =>
+    newCrmRecordModal(tab, data, ctx),
+  );
+  $("#v53-crm-import")?.addEventListener("click", () => openCrmImport(ctx));
+  bindCrmRecordActions(data, ctx);
+  if (tab === "pipeline") {
+    bindPipelineInteractions(data, ctx);
+  }
+  $$('[data-mywork-tab]').forEach((btn) => btn.addEventListener("click", () => {
+    state.unifiedTab.v53Crm = btn.dataset.myworkTab;
+    ctx.navigate(`crm?tab=${btn.dataset.myworkTab}`);
+  }));
+  bindMyWorkActions(page, ctx);
+  maybeShowMyWorkReminder(myWorkBuckets, page, ctx);
+  if (query.lead) {
+    if (
+      query.tenant === state.selectedTenantId &&
+      data.leads.some((row) => row.id === query.lead)
+    )
+      await openCrmRecord("lead", query.lead, ctx);
+    else toast("CRM lead unavailable in this authorized workspace", "error");
   }
 }
 
-function renderCrmTab(tab,data,query){
-  if(tab==='accounts') return `<div class="v53-record-grid">${data.accounts.map(row=>recordCard('account',row.id,row.name,`${row.contact_count} contacts · ${row.opportunity_count} opportunities`,cents(row.annual_value_cents),row.status,row.source)).join('')||empty('No accounts','Create or convert a lead to begin.')}</div>`;
-  if(tab==='contacts') return `<div class="v53-record-grid">${data.contacts.map(row=>recordCard('contact',row.id,`${row.first_name} ${row.last_name}`.trim()||row.email,row.account_name||'No account',row.email||row.phone,`${row.open_opportunity_count} open opportunities`,row.title)).join('')||empty('No contacts','Contacts appear when leads are converted or created.')}</div>`;
-  if(tab==='leads'){
-    const source=query.source;
-    const rows=data.leads.filter(row=>!source||String(row.source||'').toLowerCase().includes(String(source).toLowerCase()));
-    return `<div class="v53-list">${rows.map(row=>`<article class="v53-lead-row v53-searchable" data-search="${esc(`${row.contact_name} ${row.company_name} ${row.email} ${row.source}`.toLowerCase())}" data-open-record="lead" data-record-id="${row.id}"><span class="v53-avatar">${initials(row.contact_name||row.company_name)}</span><div class="v53-grow"><div class="v53-row-head"><strong>${esc(row.contact_name||row.company_name||'Unnamed lead')}</strong>${pill(row.status,row.status==='Converted'?'green':'amber')}</div><small>${esc(row.company_name||'Individual')} · ${esc(row.email||'No email')} · ${esc(row.source)}</small>${row.piq?`<div class="v53-inline-intel">ProspectIQ ${row.piq.score}/100 · ${row.piq.evidence_count} evidence items</div>`:''}</div><div class="v53-row-actions">${row.status!=='Converted'?`<button class="button small" data-convert-lead="${row.id}">Convert</button>`:''}<button class="button secondary small" data-open-record="lead" data-record-id="${row.id}">Open</button></div></article>`).join('')||empty('No leads','Website, ProspectIQ, referral and manually created leads appear here.')}</div>`;
+function renderCrmTab(tab, data, query) {
+  if (tab === "pipeline") return unifiedPipelineBoard(data, query);
+  if (tab === "accounts") return accountBoard(data.accounts, data.prospects);
+  if (tab === "contacts")
+    return `<div class="v53-record-grid">${data.contacts.map((row) => recordCard("contact", row.id, `${row.first_name} ${row.last_name}`.trim() || row.email, row.account_name || "No account", row.email || row.phone, `${row.open_opportunity_count} open opportunities`, row.title)).join("") || empty("No contacts", "Contacts appear when leads are converted or created.")}</div>`;
+  if (tab === "leads") {
+    const source = query.source;
+    const rows = data.leads.filter(
+      (row) =>
+        !source ||
+        String(row.source || "")
+          .toLowerCase()
+          .includes(String(source).toLowerCase()),
+    );
+    return `<div class="v53-list">${rows.map((row) => `<article class="v53-lead-row v53-searchable" data-search="${esc(`${row.contact_name} ${row.company_name} ${row.email} ${row.source}`.toLowerCase())}" data-open-record="lead" data-record-id="${row.id}"><span class="v53-avatar">${initials(row.contact_name || row.company_name)}</span><div class="v53-grow"><div class="v53-row-head"><strong>${esc(row.contact_name || row.company_name || "Unnamed lead")}</strong>${pill(row.status, row.status === "Converted" ? "green" : "amber")}</div><small>${esc(row.company_name || "Individual")} · ${esc(row.email || "No email")} · ${esc(row.source)}</small>${row.piq ? `<div class="v53-inline-intel">ProspectIQ ${row.piq.score}/100 · ${row.piq.evidence_count} evidence items</div>` : ""}</div><div class="v53-row-actions">${row.status !== "Converted" ? `<button class="button small" data-convert-lead="${row.id}">Create Prospect</button>` : ""}<button class="button secondary small" data-open-record="lead" data-record-id="${row.id}">Open</button></div></article>`).join("") || empty("No leads", "Website, ProspectIQ, referral and manually created leads appear here.")}</div>`;
   }
-  if(tab==='activities') return `<div class="v53-timeline">${data.activities.map(row=>`<article class="v53-timeline-item v53-searchable" data-search="${esc(`${row.subject} ${row.body} ${row.account_name} ${row.opportunity_name}`.toLowerCase())}"><span class="v53-timeline-icon">${activityIcon(row.activity_type)}</span><div><strong>${esc(row.subject||title(row.activity_type))}</strong><small>${esc(row.account_name||row.opportunity_name||'CRM activity')} · ${esc(row.actor_name)} · ${fmtDateTime(row.created_at)}</small><p>${esc(row.body||'')}</p></div></article>`).join('')||empty('No activity','Emails, notes, calls, tasks and sales changes appear here.')}</div>`;
-  return opportunityBoard(data.opportunities,query);
+  if (tab === "prospects") return prospectBoard(data.prospects);
+  if (tab === "activities") return renderActivityGroups(data.activities);
+  return opportunityBoard(data.opportunities, query);
 }
 
 function recordCard(type,id,name,subtitle,value,status,meta){return `<button class="v53-record-card v53-searchable" data-search="${esc(`${name} ${subtitle} ${meta}`.toLowerCase())}" data-open-record="${type}" data-record-id="${id}"><div class="v53-row-head"><span class="v53-avatar">${initials(name)}</span>${pill(status||type,statusTone(status))}</div><h3>${esc(name)}</h3><p>${esc(subtitle||'')}</p><div class="v53-record-foot"><strong>${esc(value||'')}</strong><small>${esc(meta||'Open record')}</small><b>→</b></div></button>`}
 function statusTone(status){const s=String(status||'').toLowerCase();if(s.includes('won')||s.includes('active')||s.includes('converted')||s.includes('complete'))return 'green';if(s.includes('lost')||s.includes('risk')||s.includes('inactive'))return 'red';if(s.includes('qualified')||s.includes('proposal'))return 'purple';return 'amber'}
 function initials(value){return String(value||'?').split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase()||'?'}
-function opportunityBoard(rows,query){
-  let filtered=rows;
-  if(query.stage) filtered=filtered.filter(x=>String(x.stage).toLowerCase().includes(String(query.stage).toLowerCase()));
-  if(query.source) filtered=filtered.filter(x=>String(x.source).toLowerCase().includes(String(query.source).toLowerCase()));
-  if(query.filter==='stale'){const cutoff=Date.now()-7*86400000;filtered=filtered.filter(x=>new Date(x.updated_at).getTime()<cutoff&&!['Closed Won','Closed Lost'].includes(x.stage));}
-  return `<div class="v53-pipeline">${STAGES.map(stage=>{const stageRows=filtered.filter(x=>x.stage===stage);const total=stageRows.reduce((sum,x)=>sum+x.value_cents,0);return `<section class="v53-pipeline-column"><header><div><strong>${esc(stage)}</strong><small>${stageRows.length} · ${cents(total)}</small></div></header><div class="v53-pipeline-list">${stageRows.map(row=>`<article class="v53-opportunity-card v53-searchable" data-search="${esc(`${row.name} ${row.account_name} ${row.contact_name} ${row.source}`.toLowerCase())}" data-open-record="opportunity" data-record-id="${row.id}"><div class="v53-row-head"><span>${pill(`${row.probability_pct}%`,'blue')}</span><small>${fmtDate(row.expected_close_date)}</small></div><h3>${esc(row.name)}</h3><p>${esc(row.account_name||row.contact_name||'Unassigned relationship')}</p><strong class="v53-money">${cents(row.value_cents)}</strong><div class="v53-next-action"><span>Next</span>${esc(row.next_action||'Set the next action')}</div>${row.piq?`<div class="v53-inline-intel">PIQ ${row.piq.score}/100 · ${row.piq.evidence_count} evidence</div>`:''}<footer><span>${row.activity_count} activities${row.last_activity_at?` · last ${fmtDate(row.last_activity_at)}`:''}</span><div><button class="v53-card-action" data-email-opportunity="${row.id}" title="Email contact">✉</button><button class="v53-card-action" data-open-record="opportunity" data-record-id="${row.id}" title="Open opportunity">↗</button></div></footer></article>`).join('')||'<div class="v53-column-empty">No opportunities</div>'}</div></section>`}).join('')}</div>`;
+function opportunityBoard(rows, query) {
+  const filtered = filteredOpportunities(rows, query);
+  return `<div class="v53-pipeline">${STAGES.map((stage) => {
+    const stageRows = filtered.filter((x) => x.stage === stage);
+    const total = stageRows.reduce((sum, x) => sum + x.value_cents, 0);
+    return `<section class="v53-pipeline-column"><header><div><strong>${esc(stage)}</strong><small>${stageRows.length} · ${cents(total)}</small></div></header><div class="v53-pipeline-list">${stageRows.map(opportunityCardMarkup).join("") || '<div class="v53-column-empty">No opportunities</div>'}</div></section>`;
+  }).join("")}</div>`;
 }
 function filterCrmRows(value){const q=String(value||'').trim().toLowerCase();$$('.v53-searchable').forEach(row=>row.hidden=!!q&&!String(row.dataset.search||'').includes(q));}
 
-function bindCrmRecordActions(data,ctx){
-  $$('[data-open-record]').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();openCrmRecord(el.dataset.openRecord,el.dataset.recordId,ctx)}));
-  $$('[data-convert-lead]').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();const row=data.leads.find(x=>x.id===btn.dataset.convertLead);convertLeadModal(row,ctx)}));
-  $$('[data-email-opportunity]').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();const row=data.opportunities.find(x=>x.id===btn.dataset.emailOpportunity);openEmailComposer({opportunity_id:row.id,account_id:row.account_id,contact_id:row.contact_id,recipient_name:row.contact_name,recipient_email:row.contact_email},ctx)}));
+function bindCrmRecordActions(data, ctx) {
+  $$("[data-open-record]").forEach((el) =>
+    {
+      const open = (event) => {
+        event.stopPropagation();
+        openCrmRecord(el.dataset.openRecord, el.dataset.recordId, ctx);
+      };
+      el.addEventListener("click", open);
+      if (el.getAttribute("role") === "button")
+        el.addEventListener("keydown", (event) => {
+          if (event.target !== el || !["Enter", " "].includes(event.key)) return;
+          event.preventDefault();
+          open(event);
+        });
+    },
+  );
+  $$("[data-convert-lead]").forEach((btn) =>
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const row = data.leads.find((x) => x.id === btn.dataset.convertLead);
+      convertLeadModal(row, ctx);
+    }),
+  );
+  $$('[data-edit-prospect]').forEach((button) => {
+    const edit = (event) => {
+      event.stopPropagation();
+      const row = data.prospects.find(
+        (item) => item.id === button.dataset.editProspect,
+      );
+      if (row) editProspectModal(row, ctx);
+    };
+    button.addEventListener("click", edit);
+    if (button.getAttribute("role") === "button")
+      button.addEventListener("keydown", (event) => {
+        if (event.target !== button || !["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        edit(event);
+      });
+  });
+  $$('[data-prospect-stage]').forEach((control) => {
+    control.closest('.v53-prospect-stage-control')?.addEventListener(
+      'click',
+      (event) => event.stopPropagation(),
+    );
+    control.addEventListener('click', (event) => event.stopPropagation());
+    control.addEventListener('change', async (event) => {
+      event.stopPropagation();
+      const row = data.prospects.find(
+        (item) => item.id === control.dataset.prospectStage,
+      );
+      if (!row) return;
+      const destination = control.value;
+      control.value = row.stage;
+      if (destination === row.stage) return;
+      if (destination === "Not Pursuing") {
+        notPursuingProspectModal(row, ctx);
+        return;
+      }
+      control.disabled = true;
+      try {
+        await updateProspectStage(row, destination);
+        state.crmPipelineFocus = { type: "prospect", id: row.id };
+        state.crmPipelineAnnouncement = `${row.account_name || "Prospect"} moved to ${destination}`;
+        toast(state.crmPipelineAnnouncement);
+        await ctx.navigate(pipelineRoute());
+      } catch (error) {
+        control.disabled = false;
+        toast(error.message, "error");
+      }
+    });
+  });
+  $$("[data-activity-prospect]").forEach((btn) =>
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const row = data.prospects.find(
+        (x) => x.id === btn.dataset.activityProspect,
+      );
+      if (row)
+        activityModal(
+          {
+            account_id: row.account_id,
+            prospect_name: row.contact_name || row.account_name,
+            prospect_stage: row.stage,
+          },
+          ctx,
+        );
+    }),
+  );
+  $$("[data-activity-opportunity]").forEach((btn) =>
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const row = data.opportunities.find(
+        (item) => item.id === btn.dataset.activityOpportunity,
+      );
+      if (row)
+        activityModal(
+          { account_id: row.account_id, opportunity_id: row.id },
+          ctx,
+        );
+    }),
+  );
+  $$("[data-email-prospect]").forEach((btn) =>
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const row = data.prospects.find(
+        (x) => x.id === btn.dataset.emailProspect,
+      );
+      if (row)
+        openEmailComposer(
+          {
+            account_id: row.account_id,
+            contact_id: row.contact_id,
+            recipient_name: row.contact_name,
+            recipient_email: row.contact_email,
+          },
+          ctx,
+        );
+    }),
+  );
+  $$("[data-email-opportunity]").forEach((btn) =>
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const row = data.opportunities.find(
+        (x) => x.id === btn.dataset.emailOpportunity,
+      );
+      openEmailComposer(
+        {
+          opportunity_id: row.id,
+          account_id: row.account_id,
+          contact_id: row.contact_id,
+          recipient_name: row.contact_name,
+          recipient_email: row.contact_email,
+        },
+        ctx,
+      );
+    }),
+  );
 }
 
-async function openCrmRecord(type,id,ctx){
-  try{
-    const data=await api(`/api/v53/tenants/${state.selectedTenantId}/crm/records/${type}/${id}`);
-    const r=data.record;
-    const display=type==='contact'?(r.name||r.email):type==='lead'?(r.contact_name||r.company_name):r.name;
-    modal({title:display||title(type),wide:true,body:recordDetailBody(data),footer:'<button class="button secondary" data-close-modal>Close</button>',onOpen:(root,close)=>{
-      $$('[data-record-action]',root).forEach(btn=>btn.addEventListener('click',()=>{
-        const action=btn.dataset.recordAction;
-        if(action==='email') openEmailComposer({account_id:r.account_id||r.id,opportunity_id:type==='opportunity'?r.id:null,contact_id:type==='contact'?r.id:r.contact_id,lead_id:type==='lead'?r.id:null,recipient_name:r.contact_name||r.name||`${r.first_name||''} ${r.last_name||''}`.trim(),recipient_email:r.contact_email||r.email||''},ctx);
-        if(action==='activity') activityModal({account_id:r.account_id|| (type==='account'?r.id:null),opportunity_id:type==='opportunity'?r.id:null},ctx);
-        if(action==='edit-opportunity') editOpportunityModal(r,ctx,close);
-        if(action==='mark-won'){close();quickCloseOpportunityModal(r,'Closed Won',ctx)}
-        if(action==='mark-lost'){close();quickCloseOpportunityModal(r,'Closed Lost',ctx)}
-        if(action==='convert') convertLeadModal(r,ctx,close);
-        if(action==='edit-contact') editContactModal(r,ctx,close);
-        if(action==='edit-lead') editLeadModal(r,ctx,close);
-      }));
-      $$('[data-open-message]',root).forEach(btn=>btn.addEventListener('click',()=>openMessageDetail(btn.dataset.openMessage)));
-    }});
-  }catch(e){toast(e.message,'error')}
+async function openCrmRecord(type, id, ctx) {
+  try {
+    const data = await api(
+      `/api/v53/tenants/${state.selectedTenantId}/crm/records/${type}/${id}`,
+    );
+    const r = data.record;
+    const display =
+      type === "contact"
+        ? r.name || r.email
+        : type === "lead"
+          ? r.contact_name || r.company_name
+          : r.name;
+    modal({
+      title: display || title(type),
+      wide: true,
+      body: recordDetailBody(data),
+      footer:
+        '<button class="button secondary" data-close-modal>Close</button>',
+      onOpen: (root, close) => {
+        $$("[data-record-action]", root).forEach((btn) =>
+          btn.addEventListener("click", () => {
+            const action = btn.dataset.recordAction;
+            if (action === "email")
+              openEmailComposer(
+                {
+                  account_id: r.account_id || r.id,
+                  opportunity_id: type === "opportunity" ? r.id : null,
+                  contact_id: type === "contact" ? r.id : r.contact_id,
+                  lead_id: type === "lead" ? r.id : null,
+                  recipient_name:
+                    r.contact_name ||
+                    r.name ||
+                    `${r.first_name || ""} ${r.last_name || ""}`.trim(),
+                  recipient_email: r.contact_email || r.email || "",
+                },
+                ctx,
+              );
+            if (action === "activity")
+              activityModal(
+                {
+                  account_id:
+                    r.account_id || (type === "account" ? r.id : null),
+                  opportunity_id: type === "opportunity" ? r.id : null,
+                },
+                ctx,
+              );
+            if (action === "edit-opportunity")
+              editOpportunityModal(r, ctx, close);
+            if (action === "edit-account") editAccountModal(r, ctx, close);
+            if (action === "mark-won") {
+              close();
+              quickCloseOpportunityModal(r, "Closed Won", ctx);
+            }
+            if (action === "mark-lost") {
+              close();
+              quickCloseOpportunityModal(r, "Closed Lost", ctx);
+            }
+            if (action === "convert") convertLeadModal(r, ctx, close);
+            if (action === "edit-contact") editContactModal(r, ctx, close);
+            if (action === "edit-lead") editLeadModal(r, ctx, close);
+          }),
+        );
+        $$("[data-open-message]", root).forEach((btn) =>
+          btn.addEventListener("click", () =>
+            openMessageDetail(btn.dataset.openMessage),
+          ),
+        );
+      },
+    });
+  } catch (e) {
+    toast(e.message, "error");
+  }
 }
 
-function recordDetailBody(data){
-  const r=data.record,type=data.record_type;
-  const headline=type==='opportunity'?`${cents(r.value_cents)} · ${r.stage}`:type==='account'?`${cents(r.annual_value_cents)} annual value`:type==='lead'?`${r.status} · ${r.source}`:(r.account_name||r.email||'Contact');
-  const isClosed=type==='opportunity'&&['Closed Won','Closed Lost'].includes(r.stage);
-  const closeActions=type==='opportunity'&&!isClosed?'<button class="button v531-win" data-record-action="mark-won">Mark Won</button><button class="button secondary v531-loss" data-record-action="mark-lost">Mark Lost</button>':'';
-  const finalStatus=isClosed?`<div class="v531-final-status ${r.stage==='Closed Won'?'won':'lost'}"><strong>${esc(r.stage)}</strong><span>${r.stage==='Closed Won'?cents(r.value_cents):esc(r.loss_reason||'Opportunity closed without a win.')}</span></div>`:'';
-  const actions=`<div class="v53-detail-actions">${closeActions}${(r.email||r.contact_email)?'<button class="button" data-record-action="email">Email</button>':''}<button class="button secondary" data-record-action="activity">Add Activity</button>${type==='opportunity'?'<button class="button secondary" data-record-action="edit-opportunity">Edit Opportunity</button>':''}${type==='lead'?'<button class="button secondary" data-record-action="edit-lead">Edit Lead</button>':''}${type==='lead'&&r.status!=='Converted'?'<button class="button secondary" data-record-action="convert">Convert Lead</button>':''}${type==='contact'?'<button class="button secondary" data-record-action="edit-contact">Edit Contact</button>':''}</div>`;
-  const piq=data.piq?`<section class="v53-detail-section v53-intelligence"><header><div><span class="v53-eyebrow">PROSPECTIQ INTELLIGENCE</span><h3>${esc(data.piq.company_name)}</h3></div><strong>${data.piq.score}/100</strong></header><p>${esc(data.piq.signal||'')}</p><div class="v53-evidence-list">${(data.piq.evidence||[]).map(e=>`<div><span>${esc(e.evidence_type)}</span><strong>${esc(e.fact)}</strong><small>${esc(e.source_name)} · ${e.confidence_pct}% confidence</small></div>`).join('')||'<small>No evidence details available.</small>'}</div></section>`:'';
-  const related=renderRelated(data.related,type);
-  const activities=`<section class="v53-detail-section"><header><h3>Activity Timeline</h3><span>${data.activities.length}</span></header><div class="v53-timeline compact">${data.activities.map(a=>`<article class="v53-timeline-item"><span class="v53-timeline-icon">${activityIcon(a.activity_type)}</span><div><strong>${esc(a.subject||title(a.activity_type))}</strong><small>${fmtDateTime(a.created_at)}</small><p>${esc(a.body||'')}</p></div></article>`).join('')||empty('No activity yet','Add a note, task, email or follow-up.')}</div></section>`;
-  const messages=`<section class="v53-detail-section"><header><h3>Communication</h3><span>${data.messages.length}</span></header><div class="v53-message-list">${data.messages.map(m=>`<button data-open-message="${m.id}"><span>✉</span><div><strong>${esc(m.subject)}</strong><small>${esc(m.sender_email)} → ${esc(m.recipient_email)} · ${fmtDateTime(m.sent_at||m.created_at)}</small></div><b>›</b></button>`).join('')||empty('No recorded email','Send a one-to-one email from this relationship record.')}</div></section>`;
-  return `<div class="v53-detail-hero"><div><span class="v53-eyebrow">${esc(title(type))}</span><h2>${esc(type==='contact'?r.name:(type==='lead'?(r.contact_name||r.company_name):r.name))}</h2><p>${esc(headline)}</p>${finalStatus}</div>${actions}</div><div class="v53-detail-grid"><section class="v53-detail-section"><h3>Record Details</h3>${recordFacts(type,r)}</section>${related}</div>${piq}<div class="v53-detail-grid">${activities}${messages}</div>`;
+function recordDetailBody(data) {
+  const r = data.record,
+    type = data.record_type;
+  const headline =
+    type === "opportunity"
+      ? `${cents(r.value_cents)} · ${r.stage}`
+      : type === "account"
+        ? `${cents(r.annual_value_cents)} annual value`
+        : type === "lead"
+          ? `${r.status} · ${r.source}`
+          : r.account_name || r.email || "Contact";
+  const isClosed =
+    type === "opportunity" && ["Closed Won", "Closed Lost"].includes(r.stage);
+  const closeActions =
+    !data.read_only && type === "opportunity" && !isClosed
+      ? '<button class="button v531-win" data-record-action="mark-won">Mark Won</button><button class="button secondary v531-loss" data-record-action="mark-lost">Mark Lost</button>'
+      : "";
+  const finalStatus = isClosed
+    ? `<div class="v531-final-status ${r.stage === "Closed Won" ? "won" : "lost"}"><strong>${esc(r.stage)}</strong><span>${r.stage === "Closed Won" ? cents(r.value_cents) : esc(r.loss_reason || "Opportunity closed without a win.")}</span></div>`
+    : "";
+  const actions = data.read_only
+    ? '<div class="v53-detail-actions"><span class="v53-dialog-note">Read-only access</span></div>'
+    : `<div class="v53-detail-actions">${closeActions}${r.email || r.contact_email ? '<button class="button" data-record-action="email">Email</button>' : ""}<button class="button secondary" data-record-action="activity">Add Activity</button>${type === "account" ? '<button class="button secondary" data-record-action="edit-account">Edit Account</button>' : ""}${type === "opportunity" ? '<button class="button secondary" data-record-action="edit-opportunity">Edit Opportunity</button>' : ""}${type === "lead" ? '<button class="button secondary" data-record-action="edit-lead">Edit Lead</button>' : ""}${type === "lead" && r.status !== "Converted" ? '<button class="button secondary" data-record-action="convert">Convert Lead</button>' : ""}${type === "contact" ? '<button class="button secondary" data-record-action="edit-contact">Edit Contact</button>' : ""}</div>`;
+  const piq = data.piq_intelligence ? renderPiqIntelligence(data.piq_intelligence) : data.piq
+    ? `<section class="v53-detail-section v53-intelligence"><header><div><span class="v53-eyebrow">PROSPECTIQ INTELLIGENCE</span><h3>${esc(data.piq.company_name)}</h3></div><strong>${data.piq.score}/100</strong></header><p>${esc(data.piq.signal || "")}</p><div class="v53-evidence-list">${(data.piq.evidence || []).map((e) => `<div><span>${esc(e.evidence_type)}</span><strong>${esc(e.fact)}</strong><small>${esc(e.source_name)} · ${e.confidence_pct}% confidence</small></div>`).join("") || "<small>No evidence details available.</small>"}</div></section>`
+    : "";
+  const related = renderRelated(data.related, type);
+  const activities = `<section class="v53-detail-section"><header><h3>Activity Timeline</h3><span>${data.activities.length}</span></header><div class="v53-timeline compact">${data.activities.map((a) => `<article class="v53-timeline-item"><span class="v53-timeline-icon">${activityIcon(a.activity_type)}</span><div><strong>${esc(a.subject || title(a.activity_type))}</strong><small>${fmtDateTime(a.created_at)}</small><p>${esc(a.body || "")}</p></div></article>`).join("") || empty("No activity yet", "Add a note, task, email or follow-up.")}</div></section>`;
+  const messages = `<section class="v53-detail-section"><header><h3>Communication</h3><span>${data.messages.length}</span></header><div class="v53-message-list">${data.messages.map((m) => `<button data-open-message="${m.id}"><span>✉</span><div><strong>${esc(m.subject)}</strong><small>${esc(m.sender_email)} → ${esc(m.recipient_email)} · ${fmtDateTime(m.sent_at || m.created_at)}</small></div><b>›</b></button>`).join("") || empty("No recorded email", "Send a one-to-one email from this relationship record.")}</div></section>`;
+  return `<div class="v53-detail-hero"><div><span class="v53-eyebrow">${esc(title(type))}</span><h2>${esc(type === "contact" ? r.name : type === "lead" ? r.contact_name || r.company_name : r.name)}</h2><p>${esc(headline)}</p>${finalStatus}</div>${actions}</div><div class="v53-detail-grid"><section class="v53-detail-section"><h3>Record Details</h3>${recordFacts(type, r)}</section>${related}</div>${piq}<div class="v53-detail-grid">${activities}${messages}</div>`;
 }
 
-function quickCloseOpportunityModal(row,stage,ctx){
-  const won=stage==='Closed Won';
-  const today=new Date().toISOString().slice(0,10);
-  modal({title:won?'Mark Opportunity Won':'Mark Opportunity Lost',body:`<div class="v53-dialog-note">${won?'Confirm the final value and close date. RMR Global will update pipeline, won revenue, reporting and the activity timeline from this same opportunity record.':'Capture the close date and loss reason. RMR Global will remove the opportunity from the open pipeline and record the outcome.'}</div><form id="v531-close-form" class="form-grid"><div class="field"><label>${won?'Final won value':'Final opportunity value'}</label><input name="value" type="number" min="0" step="100" value="${row.value_cents/100}" required></div><div class="field"><label>Close date</label><input name="close_date" type="date" value="${today}" required></div>${won?'':`<div class="field full"><label>Loss reason</label><select name="loss_reason" required><option value="">Select a reason</option><option>Price / budget</option><option>Timing</option><option>Lost to competitor</option><option>No decision</option><option>Not a fit</option><option>Other</option></select></div>`}<div class="field full"><label>Closing note (optional)</label><textarea name="note" placeholder="Add useful context for the relationship history."></textarea></div></form>`,footer:'<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v531-confirm-close">'+(won?'Confirm Won':'Confirm Lost')+'</button>',onOpen:(root,close)=>$('#v531-confirm-close',root).addEventListener('click',async()=>{const f=$('#v531-close-form',root);if(!f.reportValidity())return;try{const result=await api(`/api/v531/opportunities/${row.id}/quick-close`,{method:'POST',body:{stage,close_date:f.close_date.value,final_value_cents:Math.round(Number(f.value.value||0)*100),loss_reason:f.loss_reason?.value||'',note:f.note.value}});toast(`${row.name} marked ${stage}`);close();ctx.navigate('crm?tab=opportunities')}catch(e){toast(e.message,'error')}})});
+function quickCloseOpportunityModal(row, stage, ctx) {
+  const won = stage === "Closed Won";
+  const today = new Date().toISOString().slice(0, 10);
+  modal({
+    title: won ? "Mark Opportunity Won" : "Mark Opportunity Lost",
+    body: `<div class="v53-dialog-note">${won ? "Confirm the final value and close date. RMR Global will update pipeline, won revenue, reporting and the activity timeline from this same opportunity record." : "Capture the close date and loss reason. RMR Global will remove the opportunity from the open pipeline and record the outcome."}</div><form id="v531-close-form" class="form-grid"><div class="field"><label>${won ? "Final won value" : "Final opportunity value"}</label><input name="value" type="number" min="0" step="100" value="${row.value_cents / 100}" required></div><div class="field"><label>Close date</label><input name="close_date" type="date" value="${today}" required></div>${won ? "" : `<div class="field full"><label>Loss reason</label><select name="loss_reason" required><option value="">Select a reason</option><option>Price / budget</option><option>Timing</option><option>Lost to competitor</option><option>No decision</option><option>Not a fit</option><option>Other</option></select></div>`}<div class="field full"><label>Closing note (optional)</label><textarea name="note" placeholder="Add useful context for the relationship history."></textarea></div></form>`,
+    footer:
+      '<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v531-confirm-close">' +
+      (won ? "Confirm Won" : "Confirm Lost") +
+      "</button>",
+    onOpen: (root, close) =>
+      $("#v531-confirm-close", root).addEventListener("click", async () => {
+        const f = $("#v531-close-form", root);
+        if (!f.reportValidity()) return;
+        try {
+          await api(
+            `/api/v531/opportunities/${row.id}/quick-close`,
+            {
+              method: "POST",
+              body: {
+                stage,
+                expected_stage: row.stage,
+                close_date: f.close_date.value,
+                final_value_cents: Math.round(Number(f.value.value || 0) * 100),
+                loss_reason: f.loss_reason?.value || "",
+                note: f.note.value,
+              },
+            },
+          );
+          toast(`${row.name} marked ${stage}`);
+          state.crmPipelineFocus = { type: "opportunity", id: row.id };
+          state.crmPipelineAnnouncement = `${row.name} moved to ${stage}`;
+          close();
+          ctx.navigate(pipelineRoute());
+        } catch (e) {
+          toast(e.message, "error");
+          if (e.status === 409) {
+            close();
+            ctx.navigate(pipelineRoute());
+          }
+        }
+      }),
+  });
 }
 
-function recordFacts(type,r){const facts=[];if(type==='opportunity')facts.push(['Account',r.account_name],['Contact',r.contact_name],['Owner',r.owner_name],['Source',r.source],['Probability',`${r.probability_pct}%`],['Expected close',fmtDate(r.expected_close_date)],['Next action',r.next_action||'Not set']);else if(type==='lead')facts.push(['Company',r.company_name||'Individual'],['Email',r.email],['Phone',r.phone],['Source',r.source],['Status',r.status],['Assigned to',r.assigned_name],['Notes',r.notes]);else if(type==='contact')facts.push(['Account',r.account_name],['Email',r.email],['Phone',r.phone],['Title',r.title],['Primary contact',r.primary_contact?'Yes':'No']);else facts.push(['Status',r.status],['Owner',r.owner_name],['Team',r.team_name],['Source',r.source],['Risk',r.risk],['Notes',r.notes]);return `<dl class="v53-facts">${facts.filter(x=>x[1]!==undefined&&x[1]!==null&&x[1]!=='').map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`}
-function renderRelated(related,type){if(!related||!Object.keys(related).length)return `<section class="v53-detail-section"><h3>Related Records</h3>${empty('No related records','Relationships will appear as this record progresses.')}</section>`;const rows=[];if(related.account)rows.push(`<div><span>Account</span><strong>${esc(related.account.name)}</strong></div>`);if(related.contact)rows.push(`<div><span>Contact</span><strong>${esc(`${related.contact.first_name} ${related.contact.last_name}`.trim())}</strong></div>`);(related.contacts||[]).forEach(x=>rows.push(`<div><span>Contact</span><strong>${esc(`${x.first_name} ${x.last_name}`.trim())}</strong></div>`));(related.opportunities||[]).forEach(x=>rows.push(`<div><span>Opportunity</span><strong>${esc(x.name)} · ${cents(x.value_cents)}</strong></div>`));return `<section class="v53-detail-section"><h3>Related Records</h3><div class="v53-related-list">${rows.join('')||empty('No related records','Relationships will appear here.')}</div></section>`}
+function recordFacts(type, r) {
+  const facts = [];
+  if (type === "opportunity")
+    facts.push(
+      ["Account", r.account_name],
+      ["Contact", r.contact_name],
+      ["Owner", r.owner_name],
+      ["Source", r.source],
+      ["Probability", `${r.probability_pct}%`],
+      ["Expected close", fmtDate(r.expected_close_date)],
+      ["Next action", r.next_action || "Not set"],
+    );
+  else if (type === "lead")
+    facts.push(
+      ["Company", r.company_name || "Individual"],
+      ["Email", r.email],
+      ["Phone", r.phone],
+      ["Source", r.source],
+      ["Status", r.status],
+      ["Assigned to", r.assigned_name],
+      ["Notes", r.notes],
+    );
+  else if (type === "contact")
+    facts.push(
+      ["Account", r.account_name],
+      ["Email", r.email],
+      ["Phone", r.phone],
+      ["Title", r.title],
+      ["Primary contact", r.primary_contact ? "Yes" : "No"],
+    );
+  else
+    facts.push(
+      ["Status", r.status],
+      ["Customer since", fmtDate(r.customer_since)],
+      ["Owner", r.owner_name],
+      ["Team", r.team_name],
+      ["Source", r.source],
+      ["Risk", r.risk],
+      ["Notes", r.notes],
+    );
+  return `<dl class="v53-facts">${facts
+    .filter((x) => x[1] !== undefined && x[1] !== null && x[1] !== "")
+    .map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`)
+    .join("")}</dl>`;
+}
+function renderRelated(related, type) {
+  if (!related || !Object.keys(related).length)
+    return `<section class="v53-detail-section"><h3>Related Records</h3>${empty("No related records", "Relationships will appear as this record progresses.")}</section>`;
+  const rows = [];
+  if (related.account)
+    rows.push(
+      `<div><span>Account</span><strong>${esc(related.account.name)}</strong></div>`,
+    );
+  if (related.contact)
+    rows.push(
+      `<div><span>Contact</span><strong>${esc(`${related.contact.first_name} ${related.contact.last_name}`.trim())}</strong></div>`,
+    );
+  (related.contacts || []).forEach((x) =>
+    rows.push(
+      `<div><span>Contact</span><strong>${esc(`${x.first_name} ${x.last_name}`.trim())}</strong></div>`,
+    ),
+  );
+  (related.opportunities || []).forEach((x) =>
+    rows.push(
+      `<div><span>Opportunity · ${esc(x.stage)}</span><strong>${esc(x.name)} · ${cents(x.value_cents)}${x.expected_close_date ? ` · Expected close ${fmtDate(x.expected_close_date)}` : ""}</strong>${x.next_action ? `<small>Next action · ${esc(x.next_action)}</small>` : ""}${x.loss_reason ? `<small>Lost reason · ${esc(x.loss_reason)}</small>` : ""}</div>`,
+    ),
+  );
+  (related.prospects || []).forEach((x) =>
+    rows.push(
+      `<div><span>Prospect · ${esc(x.stage)}</span><strong>${x.stage === "Not Pursuing" && x.not_pursuing_reason ? `Reason · ${esc(x.not_pursuing_reason)}` : `Next action · ${esc(x.next_action || "Not set")}`}</strong>${x.follow_up_date ? `<small>Follow-up · ${fmtDate(x.follow_up_date)}</small>` : ""}${x.stage_note ? `<small>Notes · ${esc(x.stage_note)}</small>` : ""}</div>`,
+    ),
+  );
+  return `<section class="v53-detail-section"><h3>Related Records</h3><div class="v53-related-list">${rows.join("") || empty("No related records", "Relationships will appear here.")}</div></section>`;
+}
 
 function editLeadModal(row,ctx,parentClose){
   const fields=[['company_name','Company name',200],['contact_name','Contact name',160],['email','Email',255],['phone','Phone',80]];
@@ -181,14 +588,72 @@ function editLeadModal(row,ctx,parentClose){
     })});
 }
 
-function convertLeadModal(lead,ctx,parentClose=null){
-  const defaultAccount=lead.company_name||lead.contact_name||'Converted Lead';
-  modal({title:'Convert Lead',wide:true,body:`<div class="v53-dialog-note">Confirm what should be created. The original lead source and history remain preserved.</div><form id="v53-convert-form" class="form-grid"><div class="field"><label>Account name</label><input name="account_name" value="${esc(defaultAccount)}" required></div><div class="field"><label>Opportunity name</label><input name="opportunity_name" value="${esc(`${defaultAccount} opportunity`)}"></div><div class="field"><label>Stage</label><select name="stage">${STAGES.slice(0,4).map(x=>`<option>${x}</option>`).join('')}</select></div><div class="field"><label>Estimated value</label><input name="value" type="number" min="0" step="100" value="0"></div><div class="field"><label>Probability</label><input name="probability" type="number" min="0" max="100" value="10"></div><div class="field"><label>Expected close</label><input name="expected_close_date" type="date"></div><div class="field full"><label>Next action</label><input name="next_action" value="Schedule discovery conversation"></div><div class="field full v53-checkbox-row"><label><input name="create_contact" type="checkbox" checked> Create contact</label><label><input name="create_opportunity" type="checkbox" checked> Create opportunity</label></div></form>`,footer:'<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-confirm-convert">Convert Lead</button>',onOpen:(root,close)=>$('#v53-confirm-convert',root).addEventListener('click',async()=>{const f=$('#v53-convert-form',root);if(!f.reportValidity())return;try{await api(`/api/v53/leads/${lead.id}/convert`,{method:'POST',body:{account_name:f.account_name.value,create_contact:f.create_contact.checked,create_opportunity:f.create_opportunity.checked,opportunity_name:f.opportunity_name.value,stage:f.stage.value,value_cents:Math.round(Number(f.value.value||0)*100),probability_pct:Number(f.probability.value||0),expected_close_date:f.expected_close_date.value||null,next_action:f.next_action.value}});toast('Lead converted with confirmed CRM details');close();parentClose?.();ctx.navigate('crm?tab=opportunities')}catch(e){toast(e.message,'error')}})});
+function convertLeadModal(lead, ctx, parentClose = null) {
+  const defaultAccount =
+    lead.company_name || lead.contact_name || "Converted Lead";
+  modal({
+    title: "Create Prospect from Lead",
+    body: `<div class="v53-dialog-note">This creates the Account, Contact, and a Prospect at the Prospecting stage. You can create an Opportunity later from any active prospect stage.</div><form id="v53-convert-form" class="form-grid"><div class="field full"><label>Account name</label><input name="account_name" value="${esc(defaultAccount)}" maxlength="200" required></div></form>`,
+    footer:
+      '<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-confirm-convert">Create Prospect</button>',
+    onOpen: (root, close) =>
+      $("#v53-confirm-convert", root).addEventListener("click", async () => {
+        const f = $("#v53-convert-form", root);
+        if (!f.reportValidity()) return;
+        try {
+          await api(`/api/v53/leads/${lead.id}/convert-to-prospect`, {
+            method: "POST",
+            body: {
+              account_name: f.account_name.value,
+            },
+          });
+          toast("Prospect created at Prospecting stage");
+          close();
+          parentClose?.();
+          ctx.navigate("crm?tab=prospects");
+        } catch (e) {
+          toast(e.message, "error");
+        }
+      }),
+  });
 }
 
 function editOpportunityModal(row,ctx,parentClose){modal({title:'Edit Opportunity',body:`<form id="v53-opp-form" class="form-grid"><div class="field full"><label>Opportunity name</label><input name="name" value="${esc(row.name)}"></div><div class="field"><label>Stage</label><select name="stage">${STAGES.map(x=>`<option ${x===row.stage?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>Value</label><input name="value" type="number" min="0" value="${row.value_cents/100}"></div><div class="field"><label>Probability</label><input name="probability" type="number" min="0" max="100" value="${row.probability_pct}"></div><div class="field"><label>Expected close</label><input name="close" type="date" value="${row.expected_close_date||''}"></div><div class="field full"><label>Next action</label><input name="next_action" value="${esc(row.next_action||'')}"></div></form>`,footer:'<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-save-opp">Save Opportunity</button>',onOpen:(root,close)=>$('#v53-save-opp',root).addEventListener('click',async()=>{const f=$('#v53-opp-form',root);try{await api(`/api/opportunities/${row.id}`,{method:'PATCH',body:{name:f.name.value,stage:f.stage.value,value_cents:Math.round(Number(f.value.value||0)*100),probability_pct:Number(f.probability.value||0),expected_close_date:f.close.value||null,next_action:f.next_action.value}});toast('Opportunity updated');close();parentClose?.();ctx.navigate('crm?tab=opportunities')}catch(e){toast(e.message,'error')}})});}
 function editContactModal(row,ctx,parentClose){modal({title:'Edit Contact',body:`<form id="v53-contact-form" class="form-grid"><div class="field"><label>First name</label><input name="first_name" value="${esc(row.first_name||'')}"></div><div class="field"><label>Last name</label><input name="last_name" value="${esc(row.last_name||'')}"></div><div class="field"><label>Email</label><input name="email" type="email" value="${esc(row.email||'')}"></div><div class="field"><label>Phone</label><input name="phone" value="${esc(row.phone||'')}"></div><div class="field full"><label>Title</label><input name="title" value="${esc(row.title||'')}"></div></form>`,footer:'<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-save-contact">Save Contact</button>',onOpen:(root,close)=>$('#v53-save-contact',root).addEventListener('click',async()=>{const f=$('#v53-contact-form',root);try{await api(`/api/v53/contacts/${row.id}`,{method:'PATCH',body:{first_name:f.first_name.value,last_name:f.last_name.value,email:f.email.value,phone:f.phone.value,title:f.title.value}});toast('Contact updated');close();parentClose?.();ctx.navigate('crm?tab=contacts')}catch(e){toast(e.message,'error')}})});}
-function activityModal(context,ctx){modal({title:'Add CRM Activity',body:`<form id="v53-activity-form" class="form-grid"><div class="field"><label>Activity type</label><select name="activity_type"><option>Note</option><option>Task</option><option>Call</option><option>Meeting</option><option>Follow Up</option></select></div><div class="field"><label>Due date/time</label><input name="due_at" type="datetime-local"></div><div class="field full"><label>Subject</label><input name="subject" required></div><div class="field full"><label>Details</label><textarea name="body"></textarea></div></form>`,footer:'<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-save-activity">Save Activity</button>',onOpen:(root,close)=>$('#v53-save-activity',root).addEventListener('click',async()=>{const f=$('#v53-activity-form',root);if(!f.reportValidity())return;try{await api(`/api/tenants/${state.selectedTenantId}/activities`,{method:'POST',body:{account_id:context.account_id||null,opportunity_id:context.opportunity_id||null,activity_type:f.activity_type.value,subject:f.subject.value,body:f.body.value,due_at:f.due_at.value?new Date(f.due_at.value).toISOString():null,completed_at:null}});toast('Activity added');close();ctx.navigate('crm?tab=activities')}catch(e){toast(e.message,'error')}})});}
+function activityModal(context, ctx) {
+  modal({
+    title: "Add CRM Activity",
+    body: `${context.prospect_name ? `<div class="v53-dialog-note">For Prospect: ${esc(context.prospect_name)} · ${esc(context.prospect_stage || "")}</div>` : ""}<form id="v53-activity-form" class="form-grid"><div class="field"><label>Activity type</label><select name="activity_type"><option>Note</option><option>Task</option><option>Call</option><option>Meeting</option><option>Follow-up</option></select></div><div class="field"><label>Due date/time</label><input name="due_at" type="datetime-local"></div><div class="field full"><label>Subject</label><input name="subject" required></div><div class="field full"><label>Details</label><textarea name="body"></textarea></div></form>`,
+    footer:
+      '<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-save-activity">Save Activity</button>',
+    onOpen: (root, close) =>
+      $("#v53-save-activity", root).addEventListener("click", async () => {
+        const f = $("#v53-activity-form", root);
+        if (!f.reportValidity()) return;
+        try {
+          await api(`/api/tenants/${state.selectedTenantId}/activities`, {
+            method: "POST",
+            body: {
+              account_id: context.account_id || null,
+              opportunity_id: context.opportunity_id || null,
+              activity_type: f.activity_type.value,
+              subject: f.subject.value,
+              body: `${context.prospect_name ? `Prospect: ${context.prospect_name} (${context.prospect_stage || ""})\n` : ""}${f.body.value}`,
+              due_at: f.due_at.value
+                ? new Date(f.due_at.value).toISOString()
+                : null,
+              completed_at: null,
+            },
+          });
+          toast("Activity added");
+          close();
+          ctx.navigate("crm?tab=activities");
+        } catch (e) {
+          toast(e.message, "error");
+        }
+      }),
+  });
+}
 function newCrmRecordModal(tab,data,ctx){const choices=[['lead','Lead'],['account','Account'],['contact','Contact'],['opportunity','Opportunity'],['activity','Activity']];modal({title:'Create CRM Record',body:`<div class="v53-create-choice">${choices.map(([key,label])=>`<button data-create-kind="${key}" class="v53-create-tile"><span>${label[0]}</span><strong>${label}</strong></button>`).join('')}</div>`,footer:'<button class="button secondary" data-close-modal>Close</button>',onOpen:(root,close)=>$$('[data-create-kind]',root).forEach(btn=>btn.addEventListener('click',()=>{close();createKindModal(btn.dataset.createKind,data,ctx)}))});}
 function createKindModal(kind,data,ctx){if(kind==='activity'){activityModal({},ctx);return}const accountOptions=data.accounts.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');let body='';if(kind==='lead')body=`<form id="v53-new-form" class="form-grid"><div class="field"><label>Contact name</label><input name="contact_name" required></div><div class="field"><label>Company</label><input name="company_name"></div><div class="field"><label>Email</label><input name="email" type="email"></div><div class="field"><label>Phone</label><input name="phone"></div><div class="field"><label>Source</label><select name="source"><option>Manual</option><option>Referral</option><option>Website</option><option>ProspectIQ</option></select></div><div class="field full"><label>Notes</label><textarea name="notes"></textarea></div></form>`;if(kind==='account')body=`<form id="v53-new-form" class="form-grid"><div class="field full"><label>Account name</label><input name="name" required></div><div class="field"><label>Status</label><select name="status"><option>Active</option><option>Prospect</option><option>Inactive</option></select></div><div class="field"><label>Annual value</label><input name="annual_value" type="number" min="0"></div><div class="field"><label>Source</label><input name="source" value="Manual"></div><div class="field full"><label>Notes</label><textarea name="notes"></textarea></div></form>`;if(kind==='contact')body=`<form id="v53-new-form" class="form-grid"><div class="field"><label>First name</label><input name="first_name" required></div><div class="field"><label>Last name</label><input name="last_name" required></div><div class="field"><label>Email</label><input name="email" type="email"></div><div class="field"><label>Phone</label><input name="phone"></div><div class="field full"><label>Account</label><select name="account_id"><option value="">No account</option>${accountOptions}</select></div></form>`;if(kind==='opportunity')body=`<form id="v53-new-form" class="form-grid"><div class="field full"><label>Opportunity name</label><input name="name" required></div><div class="field"><label>Account</label><select name="account_id"><option value="">No account yet</option>${accountOptions}</select></div><div class="field"><label>Stage</label><select name="stage">${STAGES.slice(0,4).map(x=>`<option>${x}</option>`).join('')}</select></div><div class="field"><label>Value</label><input name="value" type="number" min="0"></div><div class="field"><label>Probability</label><input name="probability" type="number" min="0" max="100" value="10"></div><div class="field"><label>Expected close</label><input name="close" type="date"></div><div class="field full"><label>Next action</label><input name="next_action"></div></form>`;modal({title:`New ${title(kind)}`,body,footer:'<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-save-new">Create</button>',onOpen:(root,close)=>$('#v53-save-new',root).addEventListener('click',async()=>{const f=$('#v53-new-form',root);if(!f.reportValidity())return;try{let path='',payload={};if(kind==='lead'){path=`/api/tenants/${state.selectedTenantId}/leads`;payload={contact_name:f.contact_name.value,company_name:f.company_name.value,email:f.email.value,phone:f.phone.value,source:f.source.value,status:'New',notes:f.notes.value,assigned_user_id:null}}if(kind==='account'){path=`/api/tenants/${state.selectedTenantId}/accounts`;payload={name:f.name.value,status:f.status.value,owner_user_id:null,team_name:'',annual_value_cents:Math.round(Number(f.annual_value.value||0)*100),source:f.source.value,risk:'Low',notes:f.notes.value}}if(kind==='contact'){path=`/api/tenants/${state.selectedTenantId}/contacts`;payload={account_id:f.account_id.value||null,first_name:f.first_name.value,last_name:f.last_name.value,title:'',email:f.email.value,phone:f.phone.value,primary_contact:false}}if(kind==='opportunity'){path=`/api/tenants/${state.selectedTenantId}/opportunities`;payload={account_id:f.account_id.value||null,contact_id:null,owner_user_id:null,name:f.name.value,stage:f.stage.value,value_cents:Math.round(Number(f.value.value||0)*100),probability_pct:Number(f.probability.value||0),expected_close_date:f.close.value||null,source:'Manual',next_action:f.next_action.value,loss_reason:''}}await api(path,{method:'POST',body:payload});toast(`${title(kind)} created`);close();ctx.navigate(`crm?tab=${kind==='opportunity'?'opportunities':kind+'s'}`)}catch(e){toast(e.message,'error')}})});}
 async function duplicatesModal(ctx){try{const data=await api(`/api/tenants/${state.selectedTenantId}/crm/duplicates`);modal({title:'Potential Duplicate Accounts',wide:true,body:data.groups.length?`<div class="v53-duplicate-list">${data.groups.map(g=>`<section><h3>${esc(g.normalized_name)}</h3>${g.accounts.map(x=>`<div><strong>${esc(x.name)}</strong><small>${esc(x.source)} · ${cents(x.annual_value_cents)}</small></div>`).join('')}</section>`).join('')}</div>`:empty('No duplicates found','Account names are currently unique.'),footer:'<button class="button" data-close-modal>Done</button>'})}catch(e){toast(e.message,'error')}}
@@ -303,3 +768,443 @@ async function solutions(page,ctx){const [data,requests]=await Promise.all([api(
   ${section('Explore Additional Solutions','Learn more or request a conversation with RMR.',`<div class="v53-solution-grid">${available.map(x=>solutionCard(x,pending[x.service.code],false)).join('')||empty('No additional solutions','Your current package includes all available solutions.')}</div>`)}`;$$('[data-request-solution]').forEach(btn=>btn.addEventListener('click',()=>solutionRequestModal(btn.dataset.requestSolution,btn.dataset.solutionName,ctx)));}
 function solutionCard(x,request,isActive){const price=x.client_price_cents>0?`${cents(x.client_price_cents)}/${x.service.cadence==='usage'?'use':'month'}`:(isActive?'Included in current agreement':'Pricing confirmed by RMR');return `<article class="v53-solution-card ${isActive?'active':''}"><header><span>${isActive?'✓':'✦'}</span>${pill(isActive?'Active':request?'Request Submitted':'Available',isActive?'green':request?'amber':'blue')}</header><h3>${esc(x.service.name)}</h3><p>${esc(x.service.description)}</p><div class="v53-solution-price"><strong>${esc(price)}</strong></div><footer>${isActive?'<button class="button secondary small" data-v53-route="home">Manage in Workspace</button>':request?`<button class="button secondary small" disabled>${esc(request.status)}</button>`:`<button class="button small" data-request-solution="${x.service.code}" data-solution-name="${esc(x.service.name)}">Request This Solution</button>`}</footer></article>`}
 function solutionRequestModal(code,name,ctx){const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Phoenix';modal({title:`Request ${name}`,body:`<div class="v53-dialog-note">This is a requested contact time—not a confirmed appointment. RMR will confirm scope, pricing and timing before any activation or billing.</div><form id="v53-solution-form" class="form-grid"><div class="field full"><label>What would you like help accomplishing?</label><textarea name="note" required></textarea></div><div class="field"><label>Preferred contact method</label><select name="method"><option>Email</option><option>Phone</option><option>Video Meeting</option></select></div><div class="field"><label>Preferred date</label><input name="date" type="date" required></div><div class="field"><label>Preferred time</label><input name="time" type="time" required></div><div class="field"><label>Time zone</label><input name="timezone" value="${esc(timezone)}" required></div></form>`,footer:'<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-submit-solution">Submit Request</button>',onOpen:(root,close)=>$('#v53-submit-solution',root).addEventListener('click',async()=>{const f=$('#v53-solution-form',root);if(!f.reportValidity())return;try{const result=await api(`/api/v521/tenants/${state.selectedTenantId}/solution-requests`,{method:'POST',body:{service_code:code,note:f.note.value,preferred_contact_method:f.method.value,contact_date:f.date.value,contact_time:f.time.value,timezone:f.timezone.value}});toast(result.confirmation||'Request submitted');close();ctx.navigate('solutions')}catch(e){toast(e.message,'error')}})});}
+
+
+const PROSPECT_STAGES = [
+  "Prospecting",
+  "Engaged",
+  "Nurture",
+  "Not Pursuing",
+  "Customer",
+];
+
+
+function prospectCardMarkup(row) {
+  const nextLabel = row.stage === "Not Pursuing" ? "Reason" : "Next action";
+  const nextValue =
+    row.stage === "Not Pursuing"
+      ? row.not_pursuing_reason || "No reason recorded"
+      : row.next_action || "No next action set";
+  const canPromote = !row.opportunity_id && !["Not Pursuing", "Customer"].includes(row.stage);
+  const stageOptions = PROSPECT_STAGES.filter(
+    (stage) => stage !== "Customer" || row.stage === "Customer",
+  ).map(
+    (stage) => `<option value="${esc(stage)}" ${stage === row.stage ? "selected" : ""} ${stage === "Customer" && row.stage !== "Customer" ? "disabled" : ""}>${esc(stage)}</option>`,
+  ).join("");
+  const dragAttributes = canPromote
+    ? `data-pipeline-drag-handle data-pipeline-drag-type="prospect" data-pipeline-drag-id="${row.id}" data-pipeline-drag-stage="${esc(row.stage)}" data-pipeline-drag-label="${esc(row.account_name || "Prospect")}"`
+    : "";
+  return `<article class="v53-opportunity-card v53-crm-card v53-searchable ${canPromote ? "is-card-draggable" : ""}" role="button" tabindex="0" data-edit-prospect="${row.id}" data-pipeline-card data-record-type="prospect" data-record-id="${row.id}" data-current-stage="${esc(row.stage)}" ${dragAttributes} data-search="${esc(`${row.account_name} ${row.contact_name} ${row.stage} ${row.next_action} ${row.not_pursuing_reason} ${row.stage_note}`.toLowerCase())}" aria-label="Edit Prospect ${esc(row.account_name || row.contact_name || "record")}${canPromote ? ". Drag the card to Qualified to create an Opportunity" : ""}"><h3>${esc(row.account_name || "Unnamed account")}</h3><p>${esc(row.contact_name || "No contact")}</p><label class="v53-prospect-stage-control"><span>Stage</span><select data-prospect-stage="${row.id}" aria-label="Change Prospect stage for ${esc(row.account_name || "this Prospect")}" ${row.stage === "Customer" ? "disabled" : ""}>${stageOptions}</select></label><div class="v53-next-action"><span>${nextLabel}</span><strong>${esc(nextValue)}</strong></div>${row.follow_up_date ? `<small class="v53-prospect-follow-up">Follow-up ${fmtDate(row.follow_up_date)}</small>` : ""}<footer><span></span><div><button class="v53-card-action" data-email-prospect="${row.id}" title="Email prospect" aria-label="Email prospect">✉</button><button class="v53-card-action" data-activity-prospect="${row.id}" title="Add activity" aria-label="Add Prospect activity">＋</button></div></footer></article>`;
+}
+
+
+function opportunityCardMarkup(row) {
+  return `<article class="v53-opportunity-card v53-crm-card v53-searchable is-card-draggable" role="button" tabindex="0" data-pipeline-drag-handle data-pipeline-drag-type="opportunity" data-pipeline-drag-id="${row.id}" data-pipeline-drag-stage="${esc(row.stage)}" data-pipeline-drag-label="${esc(row.name)}" data-pipeline-card data-record-type="opportunity" data-record-id="${row.id}" data-current-stage="${esc(row.stage)}" data-search="${esc(`${row.name} ${row.account_name} ${row.contact_name} ${row.stage} ${row.source}`.toLowerCase())}" data-open-record="opportunity" aria-label="Open Opportunity ${esc(row.name)}. Drag the card or use the left and right arrow keys to change stage"><h3>${esc(row.name)}</h3><p>${esc(row.account_name || row.contact_name || "Unassigned relationship")}</p><strong class="v53-money">${cents(row.value_cents)}</strong><div class="v53-next-action"><span>${row.stage === "Closed Lost" ? "Lost reason" : "Next action"}</span><strong>${esc(row.stage === "Closed Lost" ? row.loss_reason || "No lost reason recorded" : row.next_action || "Not set")}</strong></div><footer><span></span><div><button class="v53-card-action" data-email-opportunity="${row.id}" title="Email contact" aria-label="Email Opportunity contact">✉</button><button class="v53-card-action" data-activity-opportunity="${row.id}" title="Add activity" aria-label="Add Opportunity activity">＋</button></div></footer></article>`;
+}
+
+
+function filteredOpportunities(rows, query) {
+  let filtered = rows;
+  if (query.stage)
+    filtered = filtered.filter((row) =>
+      String(row.stage).toLowerCase().includes(String(query.stage).toLowerCase()),
+    );
+  if (query.source)
+    filtered = filtered.filter((row) =>
+      String(row.source).toLowerCase().includes(String(query.source).toLowerCase()),
+    );
+  if (query.filter === "stale") {
+    const cutoff = Date.now() - 7 * 86400000;
+    filtered = filtered.filter(
+      (row) =>
+        new Date(row.updated_at).getTime() < cutoff &&
+        !["Closed Won", "Closed Lost"].includes(row.stage),
+    );
+  }
+  return filtered;
+}
+
+
+function unifiedPipelineBoard(data, query) {
+  const view = "all";
+  const source = String(query.source || "").toLowerCase();
+  const leads = data.leads.filter(
+    (row) =>
+      row.status !== "Converted" &&
+      (!source || String(row.source || "").toLowerCase().includes(source)),
+  );
+  const prospects = data.prospects.filter(
+    (row) => !row.opportunity_id,
+  );
+  const opportunities = filteredOpportunities(data.opportunities, query);
+  const leadCards = leads
+    .map(
+      (row) =>
+        `<article class="v53-opportunity-card v53-crm-card v53-searchable" role="button" tabindex="0" data-search="${esc(`${row.contact_name} ${row.company_name} ${row.email} ${row.source}`.toLowerCase())}" data-open-record="lead" data-record-id="${row.id}" aria-label="Open Lead ${esc(row.company_name || row.contact_name || "record")}"><div class="v53-row-head">${pill("Lead", "blue")}<small>${esc(row.source || "Manual")}</small></div><h3>${esc(row.company_name || row.contact_name || "Unnamed lead")}</h3><p>${esc(row.contact_name || "No contact")}</p>${row.email ? `<small class="v53-card-contact">${esc(row.email)}</small>` : ""}<footer><span></span><div><button class="button small" data-convert-lead="${row.id}">Convert to Prospect</button></div></footer></article>`,
+    )
+    .join("");
+  const availableStages = PIPELINE_STAGES;
+  // Keep historical pre-qualification/custom-stage Opportunities accessible
+  // without inventing lanes or silently rewriting their persisted stage/type.
+  const legacyOpportunities = opportunities.filter(row => !PIPELINE_STAGES.includes(row.stage));
+  const legacyCards = legacyOpportunities.map(row =>
+    opportunityCardMarkup(row).replace("<h3>", `<small class="v53-card-contact">Legacy Opportunity · ${esc(row.stage)}</small><h3>`),
+  ).join("");
+  const visibleStages =
+    view === "opportunities" && availableStages.includes(query.stage)
+      ? [query.stage]
+      : availableStages;
+  const opportunityColumns = visibleStages.map((stage) => {
+    const stageRows = opportunities.filter((row) => row.stage === stage);
+    const total = stageRows.reduce((sum, row) => sum + row.value_cents, 0);
+    return `<section class="v53-pipeline-column v53-unified-stage" data-pipeline-dropzone data-stage="${esc(stage)}" data-accepts="${stage === "Qualified" ? "prospect opportunity" : "opportunity"}" aria-label="${esc(stage)} Opportunity stage drop zone"><header><div><strong>${esc(stage)}</strong><small>${stageRows.length} · ${cents(total)}</small></div></header><div class="v53-pipeline-list">${stageRows.map(opportunityCardMarkup).join("") || '<div class="v53-column-empty">No opportunities</div>'}</div></section>`;
+  }).join("");
+  const leadColumn = `<section class="v53-pipeline-column v53-unified-stage"><header><div><strong>New Leads</strong><small>${leads.length} active</small></div></header><div class="v53-pipeline-list">${leadCards || '<div class="v53-column-empty">No active leads</div>'}</div></section>`;
+  const prospectColumn = `<section class="v53-pipeline-column v53-unified-stage"><header class="v53-prospect-column-head"><div><strong>Prospects</strong><small>${prospects.length + legacyOpportunities.length} shown</small></div></header><div class="v53-pipeline-list">${prospects.map(prospectCardMarkup).join("") + legacyCards || '<div class="v53-column-empty">No prospects in this view</div>'}</div></section>`;
+  const columns = `${view === "all" || view === "leads" ? leadColumn : ""}${view === "all" || view === "prospects" ? prospectColumn : ""}${view === "all" || view === "opportunities" ? opportunityColumns : ""}`;
+  const columnCount = view === "all" ? 2 + visibleStages.length : view === "opportunities" ? visibleStages.length : 1;
+  const scrollCue = columnCount > 1
+    ? '<div class="v53-scroll-cue"><span>Scroll pipeline horizontally</span><b aria-hidden="true">↔</b></div>'
+    : "";
+  return `<section class="v53-pipeline-workspace" data-pipeline-view-active="${view}">${scrollCue}<div class="v53-unified-pipeline-scroll" data-pipeline-main-scroll><div class="v53-unified-pipeline" style="--pipeline-columns:${columnCount};--pipeline-min-width:${Math.max(320, columnCount * 252)}px"><div class="sr-only" aria-live="polite" data-pipeline-live>${esc(state.crmPipelineAnnouncement || "")}</div><div class="v53-unified-columns">${columns}</div></div></div></section>`;
+}
+
+
+function renderActivityGroups(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const key = row.account_id || row.opportunity_id || "unlinked";
+    if (!groups.has(key)) {
+      groups.set(key, {
+        label: row.account_name || row.opportunity_name || "Unlinked activity",
+        rows: [],
+      });
+    }
+    groups.get(key).rows.push(row);
+  }
+  if (!groups.size)
+    return empty(
+      "No activity",
+      "Emails, notes, calls, tasks and sales changes appear here.",
+    );
+  return `<div class="v53-activity-groups">${[...groups.entries()]
+    .map(
+      ([key, group]) =>
+        `<section class="v53-panel v53-activity-account"><header><div><h3>${esc(group.label)}</h3><small>${group.rows.length} timeline item${group.rows.length === 1 ? "" : "s"}</small></div></header><div class="v53-timeline">${group.rows
+          .map(
+            (row) =>
+              `<article class="v53-timeline-item v53-searchable" data-search="${esc(`${row.subject} ${row.body} ${group.label} ${row.opportunity_name}`.toLowerCase())}"><span class="v53-timeline-icon">${activityIcon(row.activity_type)}</span><div><strong>${esc(row.subject || title(row.activity_type))}</strong><small>${esc(group.label)}${row.opportunity_name ? ` · ${esc(row.opportunity_name)}${row.opportunity_stage ? ` · ${esc(row.opportunity_stage)}` : ""}` : ""} · ${esc(row.actor_name)} · ${fmtDateTime(row.created_at)}</small><p>${esc(row.body || "")}</p>${row.due_at ? `<small>${row.completed_at ? "Completed" : "Due"} · ${fmtDateTime(row.due_at)}</small>` : ""}${row.expected_close_date ? `<small>Expected close · ${fmtDate(row.expected_close_date)}</small>` : ""}${row.opportunity_next_action ? `<small>Opportunity next action · ${esc(row.opportunity_next_action)}</small>` : ""}${(row.prospect_context || []).map((prospect) => `<div class="v53-activity-context"><strong>Prospect${prospect.contact_name ? ` · ${esc(prospect.contact_name)}` : ""} · ${esc(prospect.stage)}</strong>${prospect.next_action ? `<small>Next action · ${esc(prospect.next_action)}</small>` : ""}${prospect.follow_up_date ? `<small>Follow-up · ${fmtDate(prospect.follow_up_date)}</small>` : ""}${prospect.not_pursuing_reason ? `<small>Reason · ${esc(prospect.not_pursuing_reason)}</small>` : ""}${prospect.stage_note ? `<p>${esc(prospect.stage_note)}</p>` : ""}</div>`).join("")}</div></article>`,
+          )
+          .join("")}</div></section>`,
+    )
+    .join("")}</div>`;
+}
+
+
+function prospectBoard(rows) {
+  return `<div class="v53-pipeline">${PROSPECT_STAGES.map((stage) => {
+    const stageRows = rows.filter((row) => row.stage === stage);
+    return `<section class="v53-pipeline-column"><header><div><strong>${esc(stage)}</strong><small>${stageRows.length} prospect${stageRows.length === 1 ? "" : "s"}</small></div></header><div class="v53-pipeline-list">${
+      stageRows
+        .map(prospectCardMarkup)
+        .join("") || '<div class="v53-column-empty">No prospects</div>'
+    }</div></section>`;
+  }).join("")}</div>`;
+}
+
+
+function accountBoard(accounts, prospects) {
+  const stagesByAccount = new Map();
+  for (const prospect of prospects) {
+    if (!stagesByAccount.has(prospect.account_id))
+      stagesByAccount.set(prospect.account_id, new Set());
+    stagesByAccount.get(prospect.account_id).add(prospect.stage);
+  }
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const groups = [
+    {
+      key: "prospects",
+      label: "Prospect Accounts",
+      description:
+        "Relationships that have not yet recorded a Closed Won opportunity.",
+      rows: [],
+    },
+    {
+      key: "new-customers",
+      label: "New Customers",
+      description: "Accounts first won within the last 90 days.",
+      rows: [],
+    },
+    {
+      key: "existing-customers",
+      label: "Existing Customers",
+      description: "Established customers, including historical wins with an unknown first-win date.",
+      rows: [],
+    },
+    {
+      key: "unconfirmed",
+      label: "Active Accounts",
+      description: "Accounts that are not prospects, customers, or inactive.",
+      rows: [],
+    },
+    {
+      key: "inactive",
+      label: "Inactive Accounts",
+      description: "Accounts marked inactive.",
+      rows: [],
+    },
+  ];
+  const byKey = new Map(groups.map((group) => [group.key, group]));
+  for (const account of accounts) {
+    const since = account.customer_since || "";
+    if (account.status === "Inactive") byKey.get("inactive").rows.push(account);
+    else if (since >= cutoff) byKey.get("new-customers").rows.push(account);
+    else if (since || account.has_won_opportunity || stagesByAccount.get(account.id)?.has("Customer")) byKey.get("existing-customers").rows.push(account);
+    else if (account.status === "Prospect" || stagesByAccount.has(account.id))
+      byKey.get("prospects").rows.push(account);
+    else byKey.get("unconfirmed").rows.push(account);
+  }
+  return `<div class="v53-account-groups">${groups
+    .map(
+      (group) =>
+        `<section class="v53-panel v53-account-group"><header><div><h3>${esc(group.label)} <span>${group.rows.length}</span></h3><small>${esc(group.description)}</small></div></header>${
+          group.rows.length
+            ? `<div class="v53-record-grid">${group.rows
+                .map((row) => {
+                  const stages = [...(stagesByAccount.get(row.id) || [])];
+                  const relationship = stages.length
+                    ? `Prospect stage${stages.length === 1 ? "" : "s"}: ${stages.join(", ")}`
+                    : row.customer_since
+                      ? `Customer since ${fmtDate(row.customer_since)}`
+                      : row.status;
+                  return recordCard(
+                    "account",
+                    row.id,
+                    row.name,
+                    `${row.contact_count} contacts · ${row.opportunity_count} opportunities · ${relationship}`,
+                    cents(row.annual_value_cents),
+                    row.status,
+                    row.source,
+                  );
+                })
+                .join("")}</div>`
+            : `<div class="v53-account-empty">No accounts in this section.</div>`
+        }</section>`,
+    )
+    .join("")}</div>`;
+}
+
+
+function pipelineRoute(overrides = {}) {
+  const current = state.routeQuery || {};
+  const params = new URLSearchParams({ tab: "pipeline" });
+  for (const key of ["pipeline_view", "prospect_stage", "stage", "source", "filter"]) {
+    const value = Object.prototype.hasOwnProperty.call(overrides, key)
+      ? overrides[key]
+      : current[key];
+    if (value) params.set(key, value);
+  }
+  return `crm?${params.toString()}`;
+}
+
+
+function bindPipelineInteractions(data, ctx) {
+  const root = $("#v53-crm-content");
+  bindUnifiedPipeline(root, {
+    onPromoteProspect: async (id) => {
+      const row = data.prospects.find((item) => item.id === id);
+      if (row) promoteProspectModal(row, ctx);
+      return "Complete the Opportunity details to promote this Prospect.";
+    },
+    onMoveOpportunity: async (id, fromStage, destination) => {
+      const row = data.opportunities.find((item) => item.id === id);
+      if (!row) throw new Error("Opportunity is no longer available.");
+      if (["Closed Won", "Closed Lost"].includes(destination)) {
+        quickCloseOpportunityModal(row, destination, ctx);
+        return `Complete the ${destination} details to move this Opportunity.`;
+      }
+      await api(`/api/opportunities/${row.id}`, {
+        method: "PATCH",
+        body: { stage: destination, expected_stage: fromStage },
+      });
+      state.crmPipelineFocus = { type: "opportunity", id: row.id };
+      state.crmPipelineAnnouncement = `${row.name} moved to ${destination}`;
+      toast(state.crmPipelineAnnouncement);
+      await ctx.navigate(pipelineRoute());
+      return state.crmPipelineAnnouncement;
+    },
+    onError: (error) => {
+      toast(error.message, "error");
+      if (error.status === 409) void ctx.navigate(pipelineRoute());
+    },
+  });
+  const focus = state.crmPipelineFocus;
+  if (focus) {
+    const card = [...root.querySelectorAll("[data-pipeline-card]")].find(
+      (item) =>
+        item.dataset.recordType === focus.type &&
+        item.dataset.recordId === focus.id,
+    );
+    requestAnimationFrame(() =>
+      (card?.querySelector("[data-pipeline-drag-handle], [data-prospect-stage]") || card)?.focus?.(),
+    );
+    state.crmPipelineFocus = null;
+  }
+  state.crmPipelineAnnouncement = "";
+}
+
+
+function prospectUpdateBody(prospect, stage, reason = "") {
+  return {
+    stage,
+    next_action: prospect.next_action || "",
+    follow_up_date: prospect.follow_up_date || null,
+    stage_note: prospect.stage_note || "",
+    not_pursuing_reason: stage === "Not Pursuing" ? reason : "",
+  };
+}
+
+
+function updateProspectStage(prospect, stage, reason = "") {
+  return api(`/api/prospects/${prospect.id}`, {
+    method: "PATCH",
+    body: prospectUpdateBody(prospect, stage, reason),
+  });
+}
+
+
+function editAccountModal(row, ctx, parentClose) {
+  modal({
+    title: "Edit Account",
+    body: `<form id="v53-account-form" class="form-grid"><div class="field full"><label>Account name</label><input name="name" value="${esc(row.name || "")}" maxlength="200" required></div><div class="field"><label>Relationship status</label><select name="status"><option ${row.status === "Active" ? "selected" : ""}>Active</option><option ${row.status === "Prospect" ? "selected" : ""}>Prospect</option><option ${row.status === "Inactive" ? "selected" : ""}>Inactive</option></select></div></form><div class="v53-dialog-note">Set the status to Inactive to remove this account from active customer and prospect sections. Its records and history are retained.</div>`,
+    footer:
+      '<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-save-account">Save Account</button>',
+    onOpen: (root, close) =>
+      $("#v53-save-account", root).addEventListener("click", async () => {
+        const form = $("#v53-account-form", root);
+        if (!form.reportValidity()) return;
+        try {
+          await api(`/api/accounts/${row.id}`, {
+            method: "PATCH",
+            body: { name: form.name.value, status: form.status.value },
+          });
+          toast(
+            form.status.value === "Inactive"
+              ? "Account marked inactive"
+              : "Account updated",
+          );
+          close();
+          parentClose?.();
+          ctx.navigate("crm?tab=accounts");
+        } catch (e) {
+          toast(e.message, "error");
+        }
+      }),
+  });
+}
+
+
+function editProspectModal(prospect, ctx) {
+  const hasOpenOpportunity =
+    prospect.opportunity_id &&
+    !["Closed Won", "Closed Lost"].includes(prospect.opportunity_stage);
+  const reasonField =
+    prospect.stage === "Not Pursuing"
+      ? `<div class="field full"><label>Reason for not pursuing</label><textarea name="not_pursuing_reason" maxlength="500" required placeholder="Why are we choosing not to pursue this relationship?">${esc(prospect.not_pursuing_reason || "")}</textarea></div>`
+      : "";
+  modal({
+    title: "Edit Prospect",
+    body: `<div class="v53-dialog-note">${esc(prospect.account_name || "Unnamed account")} · ${esc(prospect.contact_name || "No contact")} · Current stage: ${esc(prospect.stage)}${hasOpenOpportunity ? " · This Prospect has an open Opportunity." : ""}<br>Change stage from the Prospect card; this dialog edits the working details.</div><form id="v53-prospect-form" class="form-grid"><div class="field full"><label>Next action</label><input name="next_action" maxlength="300" value="${esc(prospect.next_action || "")}" placeholder="e.g. Schedule a discovery call"></div><div class="field"><label>Follow-up date</label><input name="follow_up_date" type="date" value="${prospect.follow_up_date || ""}"></div>${reasonField}<div class="field full"><label>Prospect notes</label><textarea name="stage_note" maxlength="2000" placeholder="Add context for the relationship and its current stage.">${esc(prospect.stage_note || "")}</textarea></div></form>`,
+    footer:
+      '<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-save-prospect">Save Prospect</button>',
+    onOpen: (root, close) => {
+      const form = $("#v53-prospect-form", root);
+      $("#v53-save-prospect", root).addEventListener("click", async () => {
+        if (!form.reportValidity()) return;
+        try {
+          await api(`/api/prospects/${prospect.id}`, {
+            method: "PATCH",
+            body: {
+              stage: prospect.stage,
+              next_action: form.elements.namedItem("next_action").value.trim(),
+              follow_up_date: form.elements.namedItem("follow_up_date").value || null,
+              stage_note: form.elements.namedItem("stage_note").value.trim(),
+              not_pursuing_reason:
+                prospect.stage === "Not Pursuing"
+                  ? form.elements.namedItem("not_pursuing_reason").value.trim()
+                  : "",
+            },
+          });
+          toast("Prospect updated");
+          close();
+          ctx.navigate(pipelineRoute());
+        } catch (e) {
+          toast(e.message, "error");
+        }
+      });
+    },
+  });
+}
+
+
+function notPursuingProspectModal(prospect, ctx) {
+  modal({
+    title: "Mark Prospect Not Pursuing",
+    body: `<div class="v53-dialog-note">Record why ${esc(prospect.account_name || "this Prospect")} will not be pursued.</div><form id="v53-not-pursuing-form" class="form-grid"><div class="field full"><label>Reason for not pursuing</label><textarea name="reason" maxlength="500" required autofocus placeholder="Enter the decision context"></textarea></div></form>`,
+    footer: '<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-confirm-not-pursuing">Save stage</button>',
+    onOpen: (root, close) =>
+      $("#v53-confirm-not-pursuing", root).addEventListener("click", async () => {
+        const form = $("#v53-not-pursuing-form", root);
+        if (!form.reportValidity()) return;
+        try {
+          await updateProspectStage(prospect, "Not Pursuing", form.reason.value.trim());
+          state.crmPipelineFocus = { type: "prospect", id: prospect.id };
+          state.crmPipelineAnnouncement = `${prospect.account_name || "Prospect"} moved to Not Pursuing`;
+          toast(state.crmPipelineAnnouncement);
+          close();
+          ctx.navigate(pipelineRoute());
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      }),
+  });
+}
+
+
+function promoteProspectModal(prospect, ctx) {
+  modal({
+    title: "Create Opportunity",
+    body: `<div class="v53-dialog-note">This creates an Opportunity linked to ${esc(prospect.account_name)} at the first opportunity stage, Qualified.</div><form id="v53-promote-form" class="form-grid"><div class="field full"><label>Opportunity name</label><input name="name" value="${esc(`${prospect.account_name} opportunity`)}" maxlength="200"></div><div class="field"><label>Estimated value</label><input name="value" type="number" min="0" step="100" value="0"></div><div class="field"><label>Probability</label><input name="probability" type="number" min="0" max="100" value="10"></div><div class="field"><label>Expected close</label><input name="close" type="date"></div><div class="field full"><label>Next action</label><input name="next_action" value="Schedule discovery conversation" maxlength="300"></div></form>`,
+    footer:
+      '<button class="button secondary" data-close-modal>Cancel</button><button class="button" id="v53-create-opportunity">Create Opportunity</button>',
+    onOpen: (root, close) =>
+      $("#v53-create-opportunity", root).addEventListener("click", async () => {
+        const f = $("#v53-promote-form", root);
+        if (!f.reportValidity()) return;
+        try {
+          const result = await api(`/api/prospects/${prospect.id}/convert-to-opportunity`, {
+            method: "POST",
+            body: {
+              name: f.name.value,
+              value_cents: Math.round(Number(f.value.value || 0) * 100),
+              probability_pct: Number(f.probability.value || 0),
+              expected_close_date: f.close.value || null,
+              next_action: f.next_action.value,
+            },
+          });
+          toast("Opportunity created at Qualified stage");
+          state.crmPipelineFocus = {
+            type: "opportunity",
+            id: result.opportunity.id,
+          };
+          state.crmPipelineAnnouncement = `${result.opportunity.name} created at Qualified`;
+          close();
+          ctx.navigate(pipelineRoute());
+        } catch (e) {
+          toast(e.message, "error");
+        }
+      }),
+  });
+}

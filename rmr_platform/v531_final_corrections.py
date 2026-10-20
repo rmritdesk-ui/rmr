@@ -5,10 +5,11 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import update, func, select
 from sqlalchemy.orm import Session
 
 from .db import get_db
+from .crm_conversion import sync_won_opportunity
 from .models import Activity, Opportunity, User
 from .permissions import require_client_operational_write, require_tenant_access
 from .security import current_user, require_request_origin
@@ -22,6 +23,7 @@ CLOSED_STAGES = {"Closed Won", "Closed Lost"}
 
 class OpportunityQuickClose(BaseModel):
     stage: Literal["Closed Won", "Closed Lost"]
+    expected_stage: str | None = None
     close_date: date
     final_value_cents: int | None = Field(default=None, ge=0)
     note: str = Field(default="", max_length=2000)
@@ -74,6 +76,12 @@ def quick_close_opportunity(
     require_tenant_access(user, opportunity.tenant_id)
     require_client_operational_write(user, opportunity.tenant_id)
 
+    if payload.expected_stage is not None and opportunity.stage != payload.expected_stage:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Opportunity stage changed from {payload.expected_stage} to {opportunity.stage}; refresh and try again",
+        )
+
     if payload.stage == "Closed Lost" and not payload.loss_reason.strip():
         raise HTTPException(
             status_code=422,
@@ -83,6 +91,15 @@ def quick_close_opportunity(
             },
         )
 
+    if payload.expected_stage is not None:
+        claimed = db.execute(update(Opportunity).where(
+            Opportunity.id == opportunity.id,
+            Opportunity.tenant_id == opportunity.tenant_id,
+            Opportunity.stage == payload.expected_stage).values(stage=payload.stage),
+            execution_options={"synchronize_session": False})
+        if claimed.rowcount != 1:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="Opportunity changed; refresh and try again")
     previous_stage = opportunity.stage
     previous_value = opportunity.value_cents
     if payload.final_value_cents is not None:
@@ -92,6 +109,11 @@ def quick_close_opportunity(
     opportunity.probability_pct = 100 if payload.stage == "Closed Won" else 0
     opportunity.loss_reason = payload.loss_reason.strip() if payload.stage == "Closed Lost" else ""
     opportunity.next_action = "Closed — follow-up complete" if payload.stage == "Closed Won" else "Closed — review loss reason"
+    sync_won_opportunity(
+        db,
+        opportunity,
+        previous_opportunity_stage=previous_stage,
+    )
 
     body_lines = [
         f"Stage changed from {previous_stage} to {payload.stage}.",

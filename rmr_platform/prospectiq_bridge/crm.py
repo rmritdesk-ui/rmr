@@ -147,7 +147,7 @@ def receive(db, payload, cfg):
             deny("crm_identity_conflict", 409)
         if row.integration_event_id == event_id and row.payload_hash != digest:
             deny("crm_event_conflict", 409)
-        _insert(db, Event, dict(id=str(uuid4()), integration_instance_id=bridge.instance,
+        new_event = _insert(db, Event, dict(id=str(uuid4()), integration_instance_id=bridge.instance,
                                integration_event_id=event_id, receipt_id=row.id, payload_hash=digest))
         event = db.scalar(select(Event).where(Event.integration_instance_id == bridge.instance,
                                               Event.integration_event_id == event_id))
@@ -174,6 +174,14 @@ def receive(db, payload, cfg):
                 deny("crm_lead_unavailable", 410)
             if row.status != "accepted" or not lead or lead.tenant_id != mapping.tenant_id:
                 deny("crm_receipt_unavailable", 409)
+        # Only a new authenticated event advances source intelligence. Replaying
+        # any older event cannot revert it. Keep the original import/hash intact
+        # for event-conflict checks; never write CRM-editable fields on refresh.
+        if new_event:
+            row.provenance_json = {**(row.provenance_json or {}), "latest_intelligence": {
+                "prospect": p.model_dump(mode="json"),
+                "integration_event_id": event_id, "received_at": utcnow().isoformat(),
+                "grant_id": grant.id, "payload_hash": digest}}
         result = "created" if created else "already_exists"
         audit(db, actor, "prospectiq.crm." + result, tenant_id=mapping.tenant_id,
               entity_type="lead", entity_id=lead.id, data={

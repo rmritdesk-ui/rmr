@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime, timezone
+from uuid import uuid4
+import json
+import logging
 
-from sqlalchemy import inspect, select, text
+from sqlalchemy import inspect, select, text, MetaData, Table
 
 from . import (
     cb1_models,  # noqa: F401 - complete shared metadata be fore DDL
@@ -49,7 +53,11 @@ BILLING_OPERATIONS_VERSION = "005.014.000-billing-operations"
 MONTHLY_BILLING_VERSION = "005.015.000-monthly-billing"
 STRIPE_LIVE_ISOLATION_VERSION = "005.016.000-stripe-live-isolation"
 BILLING_EXEMPTION_VERSION = "005.017.000-tenant-billing-exemption"
-MIGRATION_VERSION = BILLING_EXEMPTION_VERSION
+CRM_PROSPECT_CONVERSION_VERSION = "005.018.000-crm-prospect-conversion-cycle"
+CRM_ACCOUNT_CUSTOMER_LIFECYCLE_VERSION = "005.019.000-crm-account-customer-lifecycle"
+CRM_PROSPECT_WORKFLOW_DETAILS_VERSION = "005.020.000-crm-prospect-workflow-details"
+CRM_PROSPECT_OUTCOME_RESTORE_VERSION = "005.021.000-crm-prospect-outcome-restore"
+MIGRATION_VERSION = CRM_PROSPECT_OUTCOME_RESTORE_VERSION
 
 
 
@@ -478,6 +486,130 @@ def apply_billing_exemption_schema(*, bind=engine) -> None:
                            "billing_exempt BOOLEAN NOT NULL DEFAULT FALSE", bind=bind)
 
 
+
+def apply_crm_prospect_conversion_schema(*, bind=engine) -> None:
+    """Version-local schema/backfill: never load current application ORM models."""
+    with bind.begin() as connection:
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS crm_prospects (
+                id VARCHAR(36) PRIMARY KEY,
+                tenant_id VARCHAR(36) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                source_lead_id VARCHAR(36) NOT NULL UNIQUE REFERENCES leads(id) ON DELETE CASCADE,
+                account_id VARCHAR(36) NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                contact_id VARCHAR(36) REFERENCES contacts(id) ON DELETE SET NULL,
+                owner_user_id VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL,
+                stage VARCHAR(40) NOT NULL DEFAULT 'Prospecting',
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_crm_prospects_tenant_id ON crm_prospects (tenant_id)"))
+    _add_column_if_missing("opportunities", "prospect_id",
+        "prospect_id VARCHAR(36) REFERENCES crm_prospects(id) ON DELETE SET NULL", bind=bind)
+    indexes = inspect(bind).get_indexes("opportunities")
+    if not any(i.get("unique") and i.get("column_names") == ["prospect_id"] for i in indexes):
+        with bind.begin() as connection:
+            connection.execute(text("CREATE UNIQUE INDEX uq_opportunities_prospect_id ON opportunities (prospect_id)"))
+    # Reflection is migration-local and includes only columns that already exist.
+    with bind.begin() as connection:
+        meta = MetaData()
+        tables = {name: Table(name, meta, autoload_with=connection) for name in
+                  ("crm_prospects", "leads", "accounts", "contacts", "opportunities", "audit_events", "users")}
+        prospects, leads, accounts, contacts, opportunities, audits, users = (
+            tables[n] for n in ("crm_prospects", "leads", "accounts", "contacts", "opportunities", "audit_events", "users"))
+        existing = set(connection.execute(select(prospects.c.source_lead_id)).scalars())
+        events = {}
+        for event in connection.execute(select(audits).where(
+                audits.c.entity_type == "lead",
+                audits.c.event_type.in_(("crm.lead.converted", "crm.lead.converted.controlled")))).mappings():
+            events.setdefault((event["tenant_id"], event["entity_id"]), []).append(event)
+        skipped = 0
+        for lead in connection.execute(select(leads).where(leads.c.status == "Converted")).mappings():
+            if lead["id"] in existing:
+                continue
+            evidence = events.get((lead["tenant_id"], lead["id"]), [])
+            mappings = []
+            for event in evidence:
+                data = event["event_data"] or {}
+                if isinstance(data, str):
+                    try:
+                        data = json.loads(data)
+                    except (ValueError, TypeError):
+                        continue
+                if isinstance(data, dict) and data.get("account_id"):
+                    mappings.append(data)
+            # Ambiguous historical relationships are left untouched.
+            if not mappings or len({(d.get("account_id"), d.get("opportunity_id"), d.get("contact_id")) for d in mappings}) != 1:
+                skipped += 1
+                continue
+            data = mappings[0]
+            account = connection.execute(select(accounts.c.id).where(
+                accounts.c.id == data["account_id"], accounts.c.tenant_id == lead["tenant_id"])).first()
+            if not account:
+                skipped += 1
+                continue
+            opportunity = None
+            if data.get("opportunity_id"):
+                opportunity = connection.execute(select(opportunities).where(
+                    opportunities.c.id == data["opportunity_id"],
+                    opportunities.c.tenant_id == lead["tenant_id"],
+                    opportunities.c.account_id == account.id)).mappings().first()
+                if not opportunity or opportunity["prospect_id"]:
+                    skipped += 1
+                    continue
+            contact_id = data.get("contact_id") or (opportunity["contact_id"] if opportunity else None)
+            if contact_id and not connection.execute(select(contacts.c.id).where(
+                    contacts.c.id == contact_id, contacts.c.tenant_id == lead["tenant_id"],
+                    contacts.c.account_id == account.id)).first():
+                skipped += 1
+                continue
+            owner = lead["assigned_user_id"]
+            if owner and not connection.execute(select(users.c.id).where(
+                    users.c.id == owner, users.c.tenant_id == lead["tenant_id"])).first():
+                owner = None
+            now = datetime.now(timezone.utc)
+            stage = ("Customer" if opportunity and opportunity["stage"] == "Closed Won" else
+                     "Not Pursuing" if opportunity and opportunity["stage"] == "Closed Lost" else "Engaged")
+            values = dict(id=str(uuid4()), tenant_id=lead["tenant_id"], source_lead_id=lead["id"],
+                          account_id=account.id, contact_id=contact_id, owner_user_id=owner,
+                          stage=stage, created_at=now, updated_at=now)
+            # Fresh create_all databases can already have the later columns.
+            for field in ("next_action", "stage_note", "not_pursuing_reason"):
+                if field in prospects.c:
+                    values[field] = ""
+            connection.execute(prospects.insert().values(**values))
+            if opportunity:
+                connection.execute(opportunities.update().where(
+                    opportunities.c.id == opportunity["id"],
+                    opportunities.c.tenant_id == lead["tenant_id"],
+                    opportunities.c.prospect_id.is_(None)).values(prospect_id=values["id"]))
+            existing.add(lead["id"])
+        if skipped:
+            logging.getLogger(__name__).warning("CRM historical backfill skipped %s unresolved mappings", skipped)
+    # Intentionally preserve every existing account status and opportunity stage.
+
+
+def apply_crm_account_customer_lifecycle_schema(*, bind=engine) -> None:
+    _add_column_if_missing("accounts", "customer_since", "customer_since DATE", bind=bind)
+    # updated_at / expected_close_date do not prove the first win date.
+    # Historical unknown dates stay NULL; no account status is rewritten.
+
+
+def apply_crm_prospect_workflow_details_schema(*, bind=engine) -> None:
+    for name, ddl in (
+        ("next_action", "next_action VARCHAR(300) NOT NULL DEFAULT ''"),
+        ("follow_up_date", "follow_up_date DATE"),
+        ("stage_note", "stage_note TEXT NOT NULL DEFAULT ''"),
+        ("not_pursuing_reason", "not_pursuing_reason VARCHAR(500) NOT NULL DEFAULT ''"),
+    ):
+        _add_column_if_missing("crm_prospects", name, ddl, bind=bind)
+
+
+def apply_crm_prospect_outcome_restore_schema(*, bind=engine) -> None:
+    _add_column_if_missing("crm_prospects", "stage_before_opportunity_outcome",
+        "stage_before_opportunity_outcome VARCHAR(40)", bind=bind)
+
+
 MIGRATIONS: list[tuple[str, Callable[[], None]]] = [
 
     (FUNCTIONAL_EXPERIENCE_VERSION, _migration_005_001_000),
@@ -509,6 +641,10 @@ MIGRATIONS: list[tuple[str, Callable[[], None]]] = [
     (MONTHLY_BILLING_VERSION, apply_monthly_billing_schema),
     (STRIPE_LIVE_ISOLATION_VERSION, apply_stripe_live_isolation_schema),
     (BILLING_EXEMPTION_VERSION, apply_billing_exemption_schema),
+    (CRM_PROSPECT_CONVERSION_VERSION, apply_crm_prospect_conversion_schema),
+    (CRM_ACCOUNT_CUSTOMER_LIFECYCLE_VERSION, apply_crm_account_customer_lifecycle_schema),
+    (CRM_PROSPECT_WORKFLOW_DETAILS_VERSION, apply_crm_prospect_workflow_details_schema),
+    (CRM_PROSPECT_OUTCOME_RESTORE_VERSION, apply_crm_prospect_outcome_restore_schema),
 
 ]
 

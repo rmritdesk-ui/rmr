@@ -1,20 +1,22 @@
 """Launch 1 CRM editing and sender ownership; disposable DB, no delivery."""
-from datetime import timedelta
+from datetime import date, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session
 
 from test_prospectiq_federation import federation_engine, fx
 from test_prospectiq_crm import transfer
 from rmr_platform import cb1_models as m, cb1_router, cb1_worker, v53_experience
-from rmr_platform import client_admin_corrections
+from rmr_platform import client_admin_corrections, v531_final_corrections
 from rmr_platform.cb1_services import sha, utcnow
 from rmr_platform.db import get_db
-from rmr_platform.models import Lead
+from rmr_platform.migrations import apply_crm_prospect_outcome_restore_schema
+from rmr_platform.models import Account, Activity, CrmProspect, Lead, Opportunity
 from rmr_platform.routes import crm, unified
 from rmr_platform.security import current_user
 
@@ -27,6 +29,7 @@ def app_client(fx):
     def cb1_actor():
         return SimpleNamespace(id=fx.user.id, tenant_id=fx.a.id, global_role='RMR_OWNER', email=fx.user.email)
     for router in (crm.router, unified.router, v53_experience.router,
+                   v531_final_corrections.router,
                    client_admin_corrections.router, cb1_router.build_router(cb1_actor)):
         app.include_router(router)
     def database():
@@ -79,6 +82,313 @@ def test_piq_lead_edit_keeps_idempotency(app_client, transfer):
     with Session(transfer.f.engine) as db:
         assert db.get(Lead, lead_id).company_name == 'Edited Company'
         assert db.query(Lead).count() == 1
+
+
+def test_prospect_activity_is_visible_after_opportunity_conversion(app_client, fx):
+    created = app_client.post(f'/api/tenants/{fx.a.id}/leads', json={
+        'company_name': 'Activity Carryover Co', 'contact_name': 'Casey Example',
+        'email': 'casey@example.invalid'})
+    assert created.status_code == 200, created.text
+    lead_id = created.json()['lead']['id']
+    converted = app_client.post(f'/api/leads/{lead_id}/convert-to-prospect')
+    assert converted.status_code == 200, converted.text
+    prospect = converted.json()['prospect']
+    account_id = converted.json()['account']['id']
+
+    activity = app_client.post(f'/api/tenants/{fx.a.id}/activities', json={
+        'account_id': account_id, 'activity_type': 'Call',
+        'subject': 'Prospect discovery call', 'body': 'Discussed timeline.'})
+    assert activity.status_code == 200, activity.text
+
+    opportunity = app_client.post(
+        f'/api/prospects/{prospect["id"]}/convert-to-opportunity', json={
+            'name': 'Activity Carryover Co opportunity'})
+    assert opportunity.status_code == 200, opportunity.text
+    opportunity_id = opportunity.json()['opportunity']['id']
+    detail = app_client.get(
+        f'/api/v53/tenants/{fx.a.id}/crm/records/opportunity/{opportunity_id}')
+    assert detail.status_code == 200, detail.text
+    assert any(row['subject'] == 'Prospect discovery call'
+               for row in detail.json()['activities'])
+
+
+def test_my_work_combines_open_activities_and_prospect_followups(app_client, fx):
+    lead = app_client.post(f'/api/tenants/{fx.a.id}/leads', json={
+        'company_name': 'MyWork Co', 'contact_name': 'Morgan Example',
+        'email': 'morgan@example.invalid'})
+    assert lead.status_code == 200, lead.text
+    converted = app_client.post(f'/api/leads/{lead.json()["lead"]["id"]}/convert-to-prospect')
+    assert converted.status_code == 200, converted.text
+    prospect_id = converted.json()['prospect']['id']
+    account_id = converted.json()['account']['id']
+    now = utcnow()
+    with Session(fx.engine) as db:
+        prospect = db.get(CrmProspect, prospect_id)
+        prospect.follow_up_date = date.today()
+        due_activity = Activity(
+            tenant_id=fx.a.id, account_id=account_id, user_id=fx.user.id,
+            activity_type='Task', subject='Prepare discovery agenda',
+            due_at=now + timedelta(hours=1),
+        )
+        db.add(due_activity)
+        db.add(Activity(
+            tenant_id=fx.a.id, account_id=account_id, user_id=fx.user.id,
+            activity_type='Task', subject='Completed task', due_at=now - timedelta(days=1),
+            completed_at=now,
+        ))
+        db.commit()
+        due_activity_id = due_activity.id
+
+    response = app_client.get(f'/api/tenants/{fx.a.id}/crm/my-work')
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert [row['subject'] for row in result['activities']] == ['Prepare discovery agenda']
+    assert [row['id'] for row in result['prospects']] == [prospect_id]
+    assert result['activities'][0]['account_name'] == 'MyWork Co'
+    assert result['activities'][0]['due_at'].endswith('+00:00')
+    completed = app_client.patch(f'/api/activities/{due_activity_id}/complete', json={})
+    assert completed.status_code == 200, completed.text
+    assert completed.json()['activity']['completed_at']
+    repeated = app_client.patch(f'/api/activities/{due_activity_id}/complete', json={})
+    assert repeated.status_code == 200, repeated.text
+    refreshed = app_client.get(f'/api/tenants/{fx.a.id}/crm/my-work')
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()['activities'] == []
+    assert [row['id'] for row in refreshed.json()['prospects']] == [prospect_id]
+    overview = app_client.get(f'/api/v53/tenants/{fx.a.id}/crm/overview')
+    assert overview.status_code == 200, overview.text
+    activity_row = next(row for row in overview.json()['activities']
+                        if row['subject'] == 'Prepare discovery agenda')
+    assert activity_row['created_at'].endswith('+00:00')
+    assert result['prospects'][0]['follow_up_date'] == date.today().isoformat()
+
+
+def test_prospect_conversion_reuses_same_tenant_account(app_client, fx):
+    created_account = app_client.post(f'/api/tenants/{fx.a.id}/accounts', json={
+        'name': 'Acme Widgets', 'status': 'Active', 'annual_value_cents': 2500})
+    assert created_account.status_code == 200, created_account.text
+    existing_account = created_account.json()['account']
+
+    created_lead = app_client.post(f'/api/tenants/{fx.a.id}/leads', json={
+        'company_name': 'acme widgets', 'contact_name': 'Jordan Example',
+        'email': 'jordan@example.invalid'})
+    assert created_lead.status_code == 200, created_lead.text
+    converted = app_client.post(
+        f'/api/v53/leads/{created_lead.json()["lead"]["id"]}/convert-to-prospect',
+        json={'account_name': ' Acme   Widgets '})
+    assert converted.status_code == 200, converted.text
+    assert converted.json()['account']['id'] == existing_account['id']
+    assert converted.json()['account']['status'] == 'Active'
+    prospect_id = converted.json()['prospect']['id']
+    opportunity = app_client.post(
+        f'/api/prospects/{prospect_id}/convert-to-opportunity', json={
+            'name': 'Acme Widgets opportunity'})
+    assert opportunity.status_code == 200, opportunity.text
+    closed = app_client.patch(
+        f'/api/opportunities/{opportunity.json()["opportunity"]["id"]}',
+        json={'stage': 'Closed Won'})
+    assert closed.status_code == 200, closed.text
+    with Session(fx.engine) as db:
+        assert db.query(Account).filter_by(tenant_id=fx.a.id).count() == 1
+        assert db.get(Account, existing_account['id']).customer_since == date.today()
+
+
+def test_direct_opportunity_creation_remains_supported(app_client, fx):
+    response = app_client.post(f'/api/tenants/{fx.a.id}/opportunities',
+        json={'name': 'Legacy opportunity', 'stage': 'Prospecting'})
+    assert response.status_code == 200, response.text
+    assert response.json()['opportunity']['stage'] == 'Prospecting'
+    assert response.json()['opportunity']['prospect_id'] is None
+
+
+def test_opportunity_stage_move_rejects_stale_expected_stage(app_client, fx):
+    lead = app_client.post(f'/api/tenants/{fx.a.id}/leads', json={
+        'company_name': 'Concurrent Stage Co', 'contact_name': 'Morgan Example',
+    }).json()['lead']
+    prospect = app_client.post(f'/api/leads/{lead["id"]}/convert-to-prospect').json()['prospect']
+    opportunity = app_client.post(
+        f'/api/prospects/{prospect["id"]}/convert-to-opportunity',
+        json={'name': 'Concurrent stage opportunity'},
+    ).json()['opportunity']
+
+    moved = app_client.patch(f'/api/opportunities/{opportunity["id"]}', json={
+        'stage': 'Proposal', 'expected_stage': 'Qualified',
+    })
+    assert moved.status_code == 200, moved.text
+    stale = app_client.patch(f'/api/opportunities/{opportunity["id"]}', json={
+        'stage': 'Verbal Commitment', 'expected_stage': 'Qualified',
+    })
+    assert stale.status_code == 409
+    assert 'refresh and try again' in stale.json()['detail']
+    stale_close = app_client.post(
+        f'/api/v531/opportunities/{opportunity["id"]}/quick-close',
+        json={
+            'stage': 'Closed Won', 'expected_stage': 'Qualified',
+            'close_date': date.today().isoformat(),
+        },
+    )
+    assert stale_close.status_code == 409
+    with Session(fx.engine) as db:
+        assert db.get(Opportunity, opportunity['id']).stage == 'Proposal'
+
+
+def test_prospect_outcome_restore_migration_is_additive_and_idempotent():
+    migration_engine = create_engine('sqlite://')
+    with migration_engine.begin() as connection:
+        connection.execute(text(
+            'CREATE TABLE crm_prospects (id VARCHAR(36) PRIMARY KEY, stage VARCHAR(40))'
+        ))
+        connection.execute(text(
+            "INSERT INTO crm_prospects (id, stage) VALUES ('existing', 'Nurture')"
+        ))
+    apply_crm_prospect_outcome_restore_schema(bind=migration_engine)
+    apply_crm_prospect_outcome_restore_schema(bind=migration_engine)
+    assert 'stage_before_opportunity_outcome' in {
+        column['name'] for column in inspect(migration_engine).get_columns('crm_prospects')
+    }
+    with migration_engine.connect() as connection:
+        row = connection.execute(text(
+            "SELECT stage, stage_before_opportunity_outcome FROM crm_prospects WHERE id = 'existing'"
+        )).one()
+    assert row == ('Nurture', None)
+
+
+def test_prospect_editor_persists_followup_notes_and_requires_not_pursuing_reason(app_client, fx):
+    created = app_client.post(f'/api/tenants/{fx.a.id}/leads', json={
+        'company_name': 'Prospect Editor Co', 'contact_name': 'Avery Example',
+        'email': 'avery@example.invalid'})
+    assert created.status_code == 200, created.text
+    converted = app_client.post(f'/api/leads/{created.json()["lead"]["id"]}/convert-to-prospect')
+    assert converted.status_code == 200, converted.text
+    prospect = converted.json()['prospect']
+
+    updated = app_client.patch(f'/api/prospects/{prospect["id"]}', json={
+        'stage': 'Nurture', 'next_action': 'Check back after budget review',
+        'follow_up_date': '2026-11-15', 'stage_note': 'Asked us to reconnect next month',
+        'not_pursuing_reason': ''})
+    assert updated.status_code == 200, updated.text
+    assert updated.json()['prospect']['stage'] == 'Nurture'
+    assert updated.json()['prospect']['next_action'] == 'Check back after budget review'
+    assert updated.json()['prospect']['follow_up_date'] == '2026-11-15'
+    assert updated.json()['prospect']['stage_note'] == 'Asked us to reconnect next month'
+    prospect_activity = app_client.get(
+        f'/api/v53/tenants/{fx.a.id}/crm/overview'
+    ).json()['activities']
+    prospect_event = next(row for row in prospect_activity if row.get('activity_type') == 'Prospect Updated')
+    assert 'Check back after budget review' in prospect_event['body']
+    assert 'Follow-up date: 2026-11-15' in prospect_event['body']
+    assert 'Asked us to reconnect next month' in prospect_event['body']
+
+    promoted = app_client.post(f'/api/prospects/{prospect["id"]}/convert-to-opportunity', json={
+        'name': 'Prospect Editor Co opportunity', 'expected_close_date': '2026-12-10',
+        'next_action': 'Prepare discovery agenda'})
+    assert promoted.status_code == 200, promoted.text
+    opportunity_id = promoted.json()['opportunity']['id']
+    opportunity_update = app_client.patch(f'/api/opportunities/{opportunity_id}', json={
+        'stage': 'Proposal', 'expected_close_date': '2027-01-15',
+        'next_action': 'Send proposal'})
+    assert opportunity_update.status_code == 200, opportunity_update.text
+    opportunity_activity = app_client.get(
+        f'/api/v53/tenants/{fx.a.id}/crm/overview'
+    ).json()['activities']
+    edit_event = next(row for row in opportunity_activity if row.get('opportunity_id') == opportunity_id)
+    assert 'Expected close: 2027-01-15' in edit_event['body']
+    assert 'Next action: Send proposal' in edit_event['body']
+    closed = app_client.patch(f'/api/opportunities/{opportunity_id}', json={
+        'stage': 'Closed Lost', 'loss_reason': 'No current budget'})
+    assert closed.status_code == 200, closed.text
+    with Session(fx.engine) as db:
+        stored_prospect = db.get(CrmProspect, prospect['id'])
+        assert stored_prospect.stage == 'Not Pursuing'
+        assert stored_prospect.stage_before_opportunity_outcome == 'Nurture'
+        assert stored_prospect.not_pursuing_reason == (
+            'Opportunity was closed as lost. Reason: No current budget'
+        )
+
+    missing_reason = app_client.patch(f'/api/prospects/{prospect["id"]}', json={
+        'stage': 'Not Pursuing', 'next_action': '', 'follow_up_date': None,
+        'stage_note': '', 'not_pursuing_reason': ''})
+    assert missing_reason.status_code == 422
+
+    not_pursuing = app_client.patch(f'/api/prospects/{prospect["id"]}', json={
+        'stage': 'Not Pursuing', 'next_action': '', 'follow_up_date': None,
+        'stage_note': '', 'not_pursuing_reason': 'No current need'})
+    assert not_pursuing.status_code == 200, not_pursuing.text
+    assert not_pursuing.json()['prospect']['not_pursuing_reason'] == 'No current need'
+    refreshed = app_client.get(f'/api/tenants/{fx.a.id}/prospects').json()['prospects']
+    reloaded_prospect = next(row for row in refreshed if row['id'] == prospect['id'])
+    assert reloaded_prospect['not_pursuing_reason'] == 'No current need'
+    assert reloaded_prospect['stage_note'] == ''
+    timeline = app_client.get(f'/api/accounts/{converted.json()["account"]["id"]}/360').json()['activities']
+    assert any('No current need' in (activity.get('body') or '') for activity in timeline)
+    account_detail = app_client.get(
+        f'/api/v53/tenants/{fx.a.id}/crm/records/account/{converted.json()["account"]["id"]}'
+    )
+    assert account_detail.status_code == 200, account_detail.text
+    assert account_detail.json()['related']['prospects'][0]['not_pursuing_reason'] == 'No current need'
+
+
+@pytest.mark.parametrize(
+    ('terminal_stage', 'expected_prospect_stage'),
+    [('Closed Won', 'Customer'), ('Closed Lost', 'Not Pursuing')],
+)
+def test_opportunity_outcome_and_reopen_restore_last_prospect_stage(
+    app_client, fx, terminal_stage, expected_prospect_stage
+):
+    lead = app_client.post(f'/api/tenants/{fx.a.id}/leads', json={
+        'company_name': f'{terminal_stage} Restore Co',
+        'contact_name': 'Taylor Example',
+    }).json()['lead']
+    converted = app_client.post(f'/api/leads/{lead["id"]}/convert-to-prospect').json()
+    prospect_id = converted['prospect']['id']
+    updated = app_client.patch(f'/api/prospects/{prospect_id}', json={
+        'stage': 'Nurture', 'next_action': '', 'follow_up_date': None,
+        'stage_note': '', 'not_pursuing_reason': '',
+    })
+    assert updated.status_code == 200, updated.text
+    promoted = app_client.post(
+        f'/api/prospects/{prospect_id}/convert-to-opportunity',
+        json={'name': f'{terminal_stage} restore opportunity'},
+    )
+    assert promoted.status_code == 200, promoted.text
+    opportunity_id = promoted.json()['opportunity']['id']
+    duplicate = app_client.post(
+        f'/api/prospects/{prospect_id}/convert-to-opportunity',
+        json={'name': 'Second opportunity must not be created'},
+    )
+    assert duplicate.status_code == 409
+    with Session(fx.engine) as db:
+        assert db.get(CrmProspect, prospect_id).stage == 'Nurture'
+
+    closed = app_client.post(
+        f'/api/v531/opportunities/{opportunity_id}/quick-close',
+        json={
+            'stage': terminal_stage,
+            'close_date': date.today().isoformat(),
+            'loss_reason': 'Budget redirected' if terminal_stage == 'Closed Lost' else '',
+        },
+    )
+    assert closed.status_code == 200, closed.text
+    with Session(fx.engine) as db:
+        prospect = db.get(CrmProspect, prospect_id)
+        assert prospect.stage == expected_prospect_stage
+        assert prospect.stage_before_opportunity_outcome == 'Nurture'
+        if terminal_stage == 'Closed Lost':
+            assert prospect.not_pursuing_reason == (
+                'Opportunity was closed as lost. Reason: Budget redirected'
+            )
+        else:
+            assert prospect.not_pursuing_reason == ''
+
+    reopened = app_client.patch(
+        f'/api/opportunities/{opportunity_id}', json={'stage': 'Qualified'}
+    )
+    assert reopened.status_code == 200, reopened.text
+    with Session(fx.engine) as db:
+        prospect = db.get(CrmProspect, prospect_id)
+        assert prospect.stage == 'Nurture'
+        assert prospect.stage_before_opportunity_outcome is None
+        assert prospect.not_pursuing_reason == ''
 
 
 @pytest.mark.parametrize('mode', ['foreign', 'read_only', 'marketing'])

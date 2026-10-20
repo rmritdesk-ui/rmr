@@ -58,7 +58,7 @@ for _ in range(2):
 from sqlalchemy import inspect, select, func, event
 from sqlalchemy.exc import IntegrityError
 from rmr_platform.db import engine, Base, SessionLocal
-from rmr_platform.migrations import MIGRATION_VERSION, migration_status, require_current_schema
+from rmr_platform.migrations import MIGRATIONS, MIGRATION_VERSION, migration_status, require_current_schema
 from rmr_platform.commercial.models import CommercialBase
 from rmr_platform.models import User, Tenant, ServiceCatalog, TenantService, SchemaMigration
 from rmr_platform.cb1_models import CB1SchemaMigration
@@ -69,7 +69,7 @@ with SessionLocal() as db:
     for model in [User,Tenant]: assert db.scalar(select(func.count()).select_from(model)) == 0
     assert db.scalar(select(func.count()).select_from(ServiceCatalog)) > 0
     assert db.scalar(select(func.count()).select_from(CB1SchemaMigration)) == 1
-    assert db.scalar(select(func.count()).select_from(SchemaMigration)) == 13
+    assert db.scalar(select(func.count()).select_from(SchemaMigration)) == len(MIGRATIONS) + 1
     service=db.scalar(select(ServiceCatalog.code))
     db.add(TenantService(tenant_id="nonexistent-release-tenant",service_code=service))
     try: db.commit()

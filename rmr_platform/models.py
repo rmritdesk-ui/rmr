@@ -1114,6 +1114,11 @@ class Account(Base):
         default="Active",
     )
 
+    customer_since: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+    )
+
     owner_user_id: Mapped[str | None] = mapped_column(
         ForeignKey(
             "users.id",
@@ -1326,6 +1331,13 @@ class Opportunity(Base):
             ondelete="SET NULL",
         ),
         nullable=True,
+    )
+
+    prospect_id: Mapped[str | None] = mapped_column(
+        ForeignKey("crm_prospects.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+        index=True,
     )
 
     name: Mapped[str] = mapped_column(
@@ -2416,3 +2428,30 @@ class PiqOpportunity(Base):
         DateTime(timezone=True),
         default=utcnow,
     )
+
+
+class CrmProspect(Base):
+    __tablename__ = "crm_prospects"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    source_lead_id: Mapped[str] = mapped_column(
+        ForeignKey("leads.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False)
+    contact_id: Mapped[str | None] = mapped_column(
+        ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    stage: Mapped[str] = mapped_column(String(40), default="Prospecting", nullable=False)
+    next_action: Mapped[str] = mapped_column(String(300), default="", nullable=False)
+    follow_up_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    stage_note: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    not_pursuing_reason: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    stage_before_opportunity_outcome: Mapped[str | None] = mapped_column(
+        String(40), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

@@ -77,7 +77,12 @@ export const dateFmt = (value) =>
         month: "short",
         day: "numeric",
         year: "numeric",
-      }).format(new Date(value))
+      }).format(/^\d{4}-\d{2}-\d{2}$/.test(String(value))
+        ? (() => {
+            const [year, month, day] = String(value).split("-").map(Number);
+            return new Date(year, month - 1, day);
+          })()
+        : new Date(value))
     : "—";
 
 export const acronym = (term) =>
