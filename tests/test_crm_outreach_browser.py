@@ -3,7 +3,7 @@ from test_prospectiq_federation import federation_engine, fx
 from test_launch1_crm_drip import app_client
 from test_crm_import_browser import browser_page, playwright
 from test_crm_outreach import prospect
-from rmr_platform.models import Contact, CrmProspect, Lead
+from rmr_platform.models import Contact, CrmProspect, Lead, Opportunity
 
 
 def test_drafts_do_not_send_or_record(browser_page,prospect):
@@ -94,14 +94,26 @@ def test_phone_missing_and_stage_visibility(browser_page,app_client,fx,prospect)
         playwright.expect(page.locator("[data-email-prospect]")).to_have_count(0)
 
 
-def test_opportunity_email_composer_unchanged(browser_page,app_client,prospect):
+def test_pipeline_hides_opportunity_email_but_detail_composer_unchanged(browser_page,app_client,prospect,fx):
     page,calls=browser_page
     result=app_client.post(f"/api/prospects/{prospect}/convert-to-opportunity",json={"name":"Existing opportunity"})
     assert result.status_code==200,result.text
     page.get_by_text("Close",exact=True).click()
     page.locator('[data-crm-tab="pipeline"]').click()
     playwright.expect(page.locator("[data-email-prospect]")).to_have_count(0)
-    page.locator("[data-email-opportunity]").click()
+    for stage in ('Prospecting', 'Qualified', 'Proposal', 'Verbal Commitment', 'Closed Won', 'Closed Lost'):
+        with Session(fx.engine) as db:
+            opportunity=db.query(Opportunity).one()
+            opportunity.stage=stage
+            opportunity_id=opportunity.id
+            db.commit()
+        page.locator('[data-crm-tab="pipeline"]').click()
+        playwright.expect(page.locator('[data-record-type="opportunity"]')).to_have_count(1)
+        playwright.expect(page.locator("[data-email-opportunity]")).to_have_count(0)
+        playwright.expect(page.locator('.v53-pipeline-workspace button[title*="Email"]')).to_have_count(0)
+    # Email elsewhere in CRM remains available; only Pipeline shortcuts change.
+    page.locator('[data-record-type="opportunity"]').click()
+    page.locator('[data-record-action="email"]').click()
     playwright.expect(page.get_by_text("Send One-to-One Email",exact=True)).to_be_visible()
     playwright.expect(page.get_by_role("button",name="Send & Record")).to_be_visible()
     assert not any(method=="POST" and "one-to-one-email" in path for method,path in calls)

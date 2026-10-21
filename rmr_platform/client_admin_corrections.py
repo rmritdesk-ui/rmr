@@ -9,6 +9,8 @@ import os
 import re
 import smtplib
 import ssl
+from uuid import uuid4
+from .social_editorial import generate as editorial_generate, LOCAL_PROVIDERS
 from datetime import date, datetime, time, timezone
 from email.message import EmailMessage
 from pathlib import Path
@@ -168,6 +170,7 @@ def environment_status(tenant_id: str, user: User = Depends(current_user), db: S
         "release": "5.4.1.2-interaction-regression-correction-po1",
         "demo_mode": settings.install_profile == "demo" or settings.auto_seed,
         "ai_provider": os.getenv("RMR_AI_PROVIDER", "demonstration").lower(),
+        "social_generation_mode": "template" if os.getenv("RMR_AI_PROVIDER", "demonstration").lower() in LOCAL_PROVIDERS else "external",
         "one_to_one_email": "client_connected_mailbox",
         "bulk_email_delivery": False,
         "campaign_export_formats": sorted(PROVIDER_EXPORTS),
@@ -242,72 +245,8 @@ def test_website_connection(tenant_id: str, payload: WebsiteConnectionIn, reques
 
 
 def _demo_social(payload: SocialGenerateIn) -> dict[str, dict[str, Any]]:
-    """High-quality deterministic Product Owner content.
-
-    This is deliberately labelled demonstration output by the API. It proves
-    the workflow without pretending that an external AI provider was called.
-    """
-    objective = payload.objective.strip().rstrip(".")
-    audience = payload.audience.strip()
-    tone = payload.tone.strip() or "professional and approachable"
-    cta = payload.call_to_action.strip() or "Learn more"
-    keywords = [k.strip().lstrip("#") for k in payload.keywords if k.strip()]
-    if not keywords:
-        stop = {"about", "their", "there", "these", "those", "would", "could", "should", "with", "from", "into", "your"}
-        keywords = [
-            w.lower() for w in re.findall(r"[A-Za-z][A-Za-z0-9]+", f"{objective} {audience}")
-            if len(w) > 4 and w.lower() not in stop
-        ][:7]
-    tags = [f"#{re.sub(r'[^A-Za-z0-9]', '', k.title())}" for k in keywords if re.sub(r'[^A-Za-z0-9]', '', k)]
-    visual = payload.suggested_visual.strip() or (
-        f"An authentic, brand-consistent image showing the real-world outcome of {objective.lower()} for {audience}."
-    )
-    promise = objective[0].upper() + objective[1:] if objective else "A better next step"
-    facebook_hook = f"A move this important deserves more than a generic checklist."
-    facebook_post = "\n\n".join([
-        facebook_hook,
-        f"{promise}. If you are part of {audience}, the right plan can make the process feel far more manageable—from the first questions through the final decision.",
-        "Start with a conversation about your goals, timing, and the details that matter most to you.",
-        cta,
-    ])
-    instagram_hook = f"Your next chapter should feel exciting—not overwhelming. ✨"
-    instagram_post = "\n\n".join([
-        instagram_hook,
-        f"{promise} for {audience}.",
-        "A clear plan. Local guidance. Fewer surprises. More confidence in every next step.",
-        f"👉 {cta}",
-    ])
-    linkedin_hook = f"The strongest outcomes usually begin with a better process."
-    linkedin_post = "\n\n".join([
-        linkedin_hook,
-        f"For {audience}, {objective.lower()} is not only a transaction—it is a sequence of decisions that benefits from relevant market context, clear expectations, and consistent follow-through.",
-        "A thoughtful process helps people move from uncertainty to an informed next step while keeping the experience personal.",
-        cta,
-    ])
-    x_hook = f"A clearer plan makes the next move easier."
-    x_post = f"{x_hook} {promise} for {audience}. {cta}"
-    return {
-        "facebook": {
-            "title": facebook_hook, "post": facebook_post,
-            "hashtags": " ".join((tags + ["#TrustedGuidance", "#NextStep"])[:7]),
-            "hook": facebook_hook, "cta": cta, "keywords": keywords, "suggested_visual": visual,
-        },
-        "instagram": {
-            "title": instagram_hook, "post": instagram_post,
-            "hashtags": " ".join((tags + ["#NewChapter", "#LocalExpert", "#MoveWithConfidence", "#RealEstateGoals"])[:12]),
-            "hook": instagram_hook, "cta": cta, "keywords": keywords, "suggested_visual": visual,
-        },
-        "linkedin": {
-            "title": linkedin_hook, "post": linkedin_post,
-            "hashtags": " ".join((tags + ["#ClientExperience", "#ProfessionalServices"])[:5]),
-            "hook": linkedin_hook, "cta": cta, "keywords": keywords, "suggested_visual": visual,
-        },
-        "x": {
-            "title": x_hook, "post": x_post[:270],
-            "hashtags": " ".join((tags + ["#NextStep"])[:3]),
-            "hook": x_hook, "cta": cta, "keywords": keywords, "suggested_visual": visual,
-        },
-    }
+    """Offline template-assisted content; never calls a provider."""
+    return editorial_generate(payload)
 
 
 def _extract_json_object(text_value: str) -> dict[str, Any]:
@@ -408,6 +347,7 @@ def generate_social(tenant_id: str, payload: SocialGenerateIn, request: Request,
     generated = _real_social(payload)
     provider = os.getenv("RMR_AI_PROVIDER", "demonstration").lower()
     items = []
+    batch_id = str(uuid4())
     for platform in PLATFORMS:
         item = generated[platform]
         row = CB1SocialContent(
@@ -432,7 +372,7 @@ def generate_social(tenant_id: str, payload: SocialGenerateIn, request: Request,
             call_to_action=str(item.get("cta") or payload.call_to_action),
             keywords_json=[str(x) for x in item.get("keywords", payload.keywords)],
             suggested_visual=str(item.get("suggested_visual") or payload.suggested_visual),
-            metadata_json={"platform": platform},
+            metadata_json={"platform": platform, "batch_id": batch_id, **item.get("editorial", {})},
         ))
         items.append({**_json_row(row), "generation": {
             "provider": provider,

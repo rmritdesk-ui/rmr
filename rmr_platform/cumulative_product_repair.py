@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from typing import Any
+import os
+from .social_editorial import generate as editorial_generate, LOCAL_PROVIDERS
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -147,6 +149,7 @@ class SocialContentUpdate(BaseModel):
 
 
 class SocialRegenerateIn(BaseModel):
+    confirm_replace: bool = False
     objective: str | None = Field(default=None, max_length=2000)
     audience: str | None = Field(default=None, max_length=1000)
     tone: str | None = Field(default=None, max_length=160)
@@ -539,6 +542,9 @@ def update_social_content(
     if not row or row.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Social content not found")
     _save_social_revision(db, row, user.id)
+    meta = db.get(SocialGenerationMetadata, social_id)
+    if meta:
+        meta.metadata_json = {**(meta.metadata_json or {}), "manually_edited": True}
     row.title = payload.title
     row.post_text = payload.post_text
     row.hashtags = payload.hashtags
@@ -564,15 +570,20 @@ def regenerate_social_content(
     if not row or row.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Social content not found")
     meta = db.get(SocialGenerationMetadata, social_id)
+    previous = dict(meta.metadata_json or {}) if meta else {}
+    if (previous.get("manually_edited") or not previous.get("generator_version")) and not payload.confirm_replace:
+        raise HTTPException(status_code=409, detail="Confirm replacing this saved draft. Its previous text will remain in revision history.")
     source = SocialGenerateIn(
         objective=payload.objective or (meta.objective if meta else row.title or row.post_text[:200]),
         audience=payload.audience or (meta.audience if meta else "the intended audience"),
         tone=payload.tone or (meta.tone if meta else "professional and approachable"),
-        call_to_action=payload.call_to_action or (meta.call_to_action if meta else "Learn more"),
+        call_to_action=payload.call_to_action or previous.get("requested_cta") or (meta.call_to_action if meta else "Learn more"),
         keywords=payload.keywords if payload.keywords is not None else (meta.keywords_json if meta else []),
         suggested_visual=payload.suggested_visual or (meta.suggested_visual if meta else ""),
     )
-    generated = _real_social(source)
+    provider = os.getenv("RMR_AI_PROVIDER", "demonstration").lower()
+    variant = (int(previous.get("variant", -1)) + 1) % 3
+    generated = editorial_generate(source, variant) if provider in LOCAL_PROVIDERS else _real_social(source)
     platform = row.platform.lower()
     if platform not in generated:
         raise HTTPException(status_code=502, detail=f"Generator did not return {row.platform} content")
@@ -586,7 +597,7 @@ def regenerate_social_content(
     if not meta:
         meta = SocialGenerationMetadata(social_content_id=row.id, tenant_id=tenant_id)
         db.add(meta)
-    meta.provider = "regenerated"
+    meta.provider = provider
     meta.objective = source.objective
     meta.audience = source.audience
     meta.tone = source.tone
@@ -594,7 +605,8 @@ def regenerate_social_content(
     meta.call_to_action = str(item.get("cta") or source.call_to_action)
     meta.keywords_json = [str(x) for x in item.get("keywords", source.keywords)]
     meta.suggested_visual = str(item.get("suggested_visual") or source.suggested_visual)
-    meta.metadata_json = {"platform": platform, "regenerated": True}
+    meta.metadata_json = {**previous, "platform": platform, "regenerated": True,
+                          **item.get("editorial", {}), "manually_edited": False}
     audit(db, user, "social.content.regenerated", tenant_id=tenant_id, entity_type="social_content", entity_id=row.id, data={"platform": platform})
     db.commit()
     return {"item": _row(row), "generation": _row(meta)}
