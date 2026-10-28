@@ -138,7 +138,15 @@ async function addClientModal(ctx) {
     });
     nameInput.addEventListener('input',()=>{if(!slugInput.dataset.edited)slugInput.value=nameInput.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')});
     slugInput.addEventListener('input',()=>slugInput.dataset.edited='1');
+    const websiteInput=form.elements.website_url;
+    websiteInput.addEventListener('input',()=>websiteInput.setCustomValidity(''));
     save.addEventListener('click',async()=>{
+      try {
+        websiteInput.value=normalizeClientWebsite(websiteInput.value);
+        websiteInput.setCustomValidity('');
+      } catch {
+        websiteInput.setCustomValidity('Enter a valid website domain or HTTP/HTTPS URL, such as example.com.');
+      }
       if(!form.reportValidity())return;
       save.disabled=true; save.textContent='Creating client…';
       const fd=new FormData(form);
@@ -150,6 +158,21 @@ async function addClientModal(ctx) {
       }catch(error){applyFieldErrors(root,error.fieldErrors);toast(error.message,'error');save.disabled=false;save.textContent='Create client';}
     });
   }});
+}
+
+function normalizeClientWebsite(value){
+  const raw=value.trim();
+  if(!raw)return '';
+  const explicitScheme=/^[a-z][a-z0-9+.-]*:/i.test(raw);
+  const normalized=explicitScheme?raw:`https://${raw}`;
+  if(/\s|\\/.test(raw)||raw.startsWith('//')||(explicitScheme&&!/^https?:\/\/[^/?#]/i.test(raw)))throw new Error('Invalid website');
+  const url=new URL(normalized);
+  const host=url.hostname;
+  const domain=/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{2,59})$/i;
+  const ip=host.split('.');
+  const validIP=(ip.length===4&&ip.every(part=>/^\d{1,3}$/.test(part)&&Number(part)<=255))||host.startsWith('[');
+  if(!['http:','https:'].includes(url.protocol)||url.username||url.password||host.length>253||(!domain.test(host)&&!(explicitScheme&&validIP)))throw new Error('Invalid website');
+  return normalized;
 }
 
 function showClientCreated(result,ctx){
